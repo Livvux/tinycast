@@ -495,12 +495,13 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 ### Quicklinks
 
 - A quicklink opens its destination; `{argument}` prompts in order and Backspace steps back
-- `{selection}` falls back per the Settings choice
-- With "Ask for it" and no selection, a quicklink's hotkey focuses "Selected Text": typing fills that
-  field and Return opens the link. Check the first palette opening after launch, reopening, and an
-  already-open palette; repeat with a required `{argument}` and confirm the first missing field wins
-- Opening Search Quicklinks normally focuses search; a readable selection and clipboard fallback open
-  directly. Custom-command argument prompts still focus their first missing field
+- `{selection}` with nothing selected opens nothing and shows "Couldn’t get the selected text"; the
+  palette stays put. With a required `{argument}` too, the argument is asked for first
+- With **Pass selected text as argument** on, select text and press a quicklink's shortcut: its first
+  free-text argument is filled and the link opens. Blank selection or an `options=` first argument still
+  prompts; Return on the row in the launcher never fills from the selection
+- Opening Search Quicklinks normally focuses search; a readable selection opens directly.
+  Custom-command argument prompts still focus their first missing field
 - In the launcher and Search Quicklinks, open Actions with ⌘K and close with ⌘K or Escape. Immediately
   type a query, use the arrows and press Return; the palette must accept keyboard input again
 - Pin, duplicate, delete and Open with Default all behave; import and export round-trip

@@ -12,15 +12,6 @@ enum SnippetTemplateEngine {
         /// Injected so `{uuid}` is reproducible under test.
         let makeUUID: @Sendable () -> String
 
-        var clipboard: String { clipboardHistory.first ?? "" }
-
-        /// A copy reading a different selection, for a caller that learns it after capture.
-        func replacingSelection(with selection: String) -> Self {
-            Self(
-                clipboardHistory: clipboardHistory, selection: selection, now: now,
-                calendar: calendar, locale: locale, timeZone: timeZone, makeUUID: makeUUID)
-        }
-
         init(
             clipboardHistory: [String],
             selection: String,
