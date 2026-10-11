@@ -69,26 +69,40 @@ enum HyperKeyPhysicalKey: String, CaseIterable, Identifiable, Sendable {
     func route(secureInputCompatible: Bool) -> HyperKeyRoute? {
         guard let keyCode else { return nil }
         guard self == .capsLock else {
-            return HyperKeyRoute(key: self, tapKeyCode: keyCode, usesKeyEvents: false, remap: nil)
+            return HyperKeyRoute(key: self, tapKeyCode: keyCode, modifier: modifierKey, remap: nil)
         }
         // Secure Input still delivers modifiers, so this variant sends Right Control instead of F18.
         if secureInputCompatible {
             return HyperKeyRoute(
-                key: self, tapKeyCode: kVK_RightControl, usesKeyEvents: false,
+                key: self, tapKeyCode: kVK_RightControl, modifier: .rightControl,
                 remap: HIDKeyMapping(
                     source: HIDKeyMapping.capsLock, destination: HIDKeyMapping.rightControl))
         }
         return HyperKeyRoute(
-            key: self, tapKeyCode: kVK_F18, usesKeyEvents: true,
+            key: self, tapKeyCode: kVK_F18, modifier: nil,
             remap: HIDKeyMapping(source: HIDKeyMapping.capsLock, destination: HIDKeyMapping.f18))
+    }
+
+    private var modifierKey: ModifierKey? {
+        switch self {
+        case .none, .capsLock: return nil
+        case .leftControl: return .leftControl
+        case .leftShift: return .leftShift
+        case .leftOption: return .leftOption
+        case .leftCommand: return .leftCommand
+        case .rightControl: return .rightControl
+        case .rightShift: return .rightShift
+        case .rightOption: return .rightOption
+        case .rightCommand: return .rightCommand
+        }
     }
 }
 
 struct HyperKeyRoute: Equatable, Sendable {
     let key: HyperKeyPhysicalKey
     let tapKeyCode: Int
-    /// A remapped function key arrives as keyDown/keyUp; a modifier as `flagsChanged`.
-    let usesKeyEvents: Bool
+    /// Whose device bit tells press from release; nil for F18, which arrives as keyDown/keyUp.
+    let modifier: ModifierKey?
     let remap: HIDKeyMapping?
 }
 

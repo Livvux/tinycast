@@ -81,7 +81,7 @@ final class HIDEventSystem {
         guard
             functions.conformsTo(
                 service, UInt32(kHIDPage_GenericDesktop), UInt32(kHIDUsage_GD_Keyboard)
-            ).boolValue
+            ) != 0
         else { return nil }
         let object = Unmanaged<AnyObject>.fromOpaque(service).takeUnretainedValue()
         return Keyboard(
@@ -113,7 +113,7 @@ private struct Functions {
         -> Void
     typealias CreateSimpleClient = @convention(c) (CFAllocator?) -> UnsafeMutableRawPointer?
     typealias CopyServices = @convention(c) (UnsafeMutableRawPointer) -> Unmanaged<CFArray>?
-    typealias ConformsTo = @convention(c) (UnsafeMutableRawPointer, UInt32, UInt32) -> DarwinBoolean
+    typealias ConformsTo = @convention(c) (UnsafeMutableRawPointer, UInt32, UInt32) -> boolean_t
     typealias CopyProperty =
         @convention(c) (UnsafeMutableRawPointer, CFString) -> Unmanaged<AnyObject>?
     typealias SetProperty =

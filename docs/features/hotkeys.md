@@ -229,14 +229,16 @@ The mapping comes off on unbind, on quit, while the Mac sleeps, while the screen
 typed at the lock screen needs a real Caps Lock — and while another user's session is active, and goes
 back on once none of those holds.
 
-### Press tracking uses toggle semantics
+### Press tracking reads the event
 
-`flagsChanged` does not describe its own direction, so a modifier-style Hyper key is tracked by
-toggling. The obvious alternative — querying `CGEventSource` key state — **races the release**,
-inverting the state machine and breaking Quick Press. A missed release therefore lingers only until
-the next press, a Secure Input transition or a pause clears it. Work that posts events or touches
-IOKit is deferred to the next runloop turn rather than run inside the tap callback, where it would
-risk re-entrancy.
+A modifier's `flagsChanged` carries its own device bit (`NX_DEVICE…KEYMASK`) while that key is down,
+so `ModifierKey.held(in:)` reads each press and release of a modifier Hyper key from the event itself.
+A hold dropped mid-press — by a Secure Input transition, a tap timeout or a pause — costs at most the
+rest of that press and can never invert the key. Toggling instead would let one dropped hold read
+every later release as a press, leaving the chord on every keystroke; querying `CGEventSource` key
+state **races the release**. The one toggle left is the window before the Caps Lock remap lands,
+because alpha-shift is a latch, not a press. Work that posts events or touches IOKit is deferred to
+the next runloop turn rather than run inside the tap callback, where it would risk re-entrancy.
 
 The flags OR'd into every rewritten event are the generic ⌃⌥(⇧)⌘ masks **plus the left-side device
 bits** (`NX_DEVICE…KEYMASK`, from `IOLLEvent.h`). Some consumers distinguish sides, and generic-only

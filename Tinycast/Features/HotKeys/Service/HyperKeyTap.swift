@@ -146,9 +146,10 @@ final class HyperKeyTap {
             return decideHyperKeyEvent(
                 route: route, type: type, flagsRaw: flagsRaw, isAutorepeat: isAutorepeat)
         }
-        // Before the remap takes hold the key is still Caps Lock, so ride the modifier path.
+        // Before the remap takes hold the key is still Caps Lock, whose flag is a latch, so toggle.
         if route.key == .capsLock, keyCode == kVK_CapsLock, type == .flagsChanged {
-            return decideModifierTransition(flagsRaw: flagsRaw, swapKeyCode: true)
+            let flags = transition(isDown: !hyperActive, flagsRaw: flagsRaw)
+            return .rewrite(flags: flags, keyCode: Int64(kVK_Control))
         }
         guard hyperActive else { return .pass }
         // Any other key or modifier going down while Hyper is held makes this a combo, not a tap.
@@ -156,40 +157,44 @@ final class HyperKeyTap {
         return .rewrite(flags: hyperized(flagsRaw))
     }
 
+    /// docs/features/hotkeys.md#press-tracking-reads-the-event
     private func decideHyperKeyEvent(
         route: HyperKeyRoute, type: CGEventType, flagsRaw: UInt64, isAutorepeat: Bool
     ) -> Decision {
-        if route.usesKeyEvents {
-            // F18 arrives as keyDown/keyUp; convert both ends into flagsChanged transitions.
-            let flagsRaw = flagsRaw & ~Self.functionKeyFlagRaw
-            switch type {
-            case .keyDown:
-                if isAutorepeat { return .suppress }
-                if !hyperActive { beginHold() }
-                return .rewrite(
-                    flags: hyperized(flagsRaw), keyCode: Int64(kVK_Control), asFlagsChanged: true)
-            case .keyUp:
-                if hyperActive { endHold() }
-                return .rewrite(
-                    flags: flagsRaw & ~strippedFlagsRaw, keyCode: Int64(kVK_Control),
-                    asFlagsChanged: true)
-            default:
-                return .pass
-            }
+        guard let modifier = route.modifier else {
+            return decideFunctionKeyEvent(type: type, flagsRaw: flagsRaw, isAutorepeat: isAutorepeat)
         }
         guard type == .flagsChanged else { return .pass }
-        return decideModifierTransition(flagsRaw: flagsRaw, swapKeyCode: false)
+        let isDown = ModifierKey.held(in: flagsRaw, globeDown: false).contains(modifier)
+        return .rewrite(flags: transition(isDown: isDown, flagsRaw: flagsRaw))
     }
 
-    /// docs/features/hotkeys.md#press-tracking-uses-toggle-semantics
-    private func decideModifierTransition(flagsRaw: UInt64, swapKeyCode: Bool) -> Decision {
-        let keyCode: Int64? = swapKeyCode ? Int64(kVK_Control) : nil
-        if !hyperActive {
-            beginHold()
-            return .rewrite(flags: hyperized(flagsRaw), keyCode: keyCode)
+    /// F18 arrives as keyDown/keyUp; both ends become Left Control `flagsChanged` transitions.
+    private func decideFunctionKeyEvent(
+        type: CGEventType, flagsRaw: UInt64, isAutorepeat: Bool
+    ) -> Decision {
+        let flagsRaw = flagsRaw & ~Self.functionKeyFlagRaw
+        switch type {
+        case .keyDown:
+            if isAutorepeat { return .suppress }
+            let flags = transition(isDown: true, flagsRaw: flagsRaw)
+            return .rewrite(flags: flags, keyCode: Int64(kVK_Control), asFlagsChanged: true)
+        case .keyUp:
+            let flags = transition(isDown: false, flagsRaw: flagsRaw)
+            return .rewrite(flags: flags, keyCode: Int64(kVK_Control), asFlagsChanged: true)
+        default:
+            return .pass
         }
-        endHold()
-        return .rewrite(flags: flagsRaw & ~strippedFlagsRaw, keyCode: keyCode)
+    }
+
+    /// Moves the hold to match the key, returning the flags its own event should carry.
+    private func transition(isDown: Bool, flagsRaw: UInt64) -> UInt64 {
+        if isDown {
+            if !hyperActive { beginHold() }
+            return hyperized(flagsRaw)
+        }
+        if hyperActive { endHold() }
+        return flagsRaw & ~strippedFlagsRaw
     }
 
     // MARK: - Hold state machine
