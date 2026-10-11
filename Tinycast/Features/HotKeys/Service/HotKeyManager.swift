@@ -62,6 +62,10 @@ final class HotKeyManager {
 
     private let center = HotKeyCenter()
     private var modifierTaps: [HotKeyBinding: HotKeyAction] = [:]
+    /// Include Shift for the chord whose combos also answer to ⌃+key; nil when none should.
+    private var secureInputEquivalentsIncludeShift: Bool?
+    private var secureInputEquivalentIDs: [String] = []
+    private static let secureInputHintID = "secureInputHint"
     /// Every binding, loaded once in `start()` and written through on change.
     private var bindings: [HotKeyAction: HotKeyBinding] = [:]
     /// Part of `AppIndex`'s cache key: a bound entry leaves the launcher's Suggestions.
@@ -228,6 +232,40 @@ final class HotKeyManager {
         // A rebuild walks every candidate; only a modifier-only binding changes this map.
         if previous?.usesModifierTapMonitor == true || binding?.usesModifierTapMonitor == true {
             syncModifierTaps()
+        }
+        if secureInputEquivalentsIncludeShift != nil { syncSecureInputEquivalents() }
+    }
+
+    // MARK: - Secure Input
+
+    /// Secure Input hides the Hyper chord from every tap, so its combos also register with ⌃.
+    func setSecureInputEquivalents(includesShift: Bool?) {
+        guard includesShift != secureInputEquivalentsIncludeShift else { return }
+        secureInputEquivalentsIncludeShift = includesShift
+        syncSecureInputEquivalents()
+    }
+
+    func setSecureInputHint(_ shortcut: KeyShortcut?, onPress: @escaping () -> Void) {
+        center.unregister(id: Self.secureInputHintID)
+        guard let shortcut else { return }
+        center.register(id: Self.secureInputHintID, shortcut: shortcut, onKeyDown: onPress)
+    }
+
+    /// Rebuilt wholesale, like the modifier-tap map, so an equivalent cannot outlive its binding.
+    private func syncSecureInputEquivalents() {
+        secureInputEquivalentIDs.forEach { center.unregister(id: $0) }
+        secureInputEquivalentIDs = []
+        guard let includesShift = secureInputEquivalentsIncludeShift else { return }
+        let chord = KeyShortcut.hyperChord(includesShift: includesShift)
+        for action in candidateActions {
+            guard let equivalent = binding(for: action)?.shortcut?.secureInputEquivalent(of: chord)
+            else {
+                continue
+            }
+            let id = "secureInputEquivalent." + action.defaultsKey
+            center.register(
+                id: id, shortcut: equivalent, onKeyDown: { [weak self] in self?.perform(action) })
+            secureInputEquivalentIDs.append(id)
         }
     }
 
