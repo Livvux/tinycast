@@ -80,8 +80,8 @@ pasteboard and the poller skips anything carrying it.
 
 A ⌘C Tinycast sends to read a selection can't carry that marker, since the other app writes it.
 `pauseCapture()` and `resumeCapture()` bracket that borrow instead: the poller skips every tick in
-between, and the restore's baseline keeps the copy from being recorded once it resumes. The pauses
-are counted, so two overlapping borrows resume only when both are done.
+between, and the restore's baseline keeps the copy from being recorded once it resumes.
+`TextInjector` refuses a second borrow while one is in flight, so the pause is never nested.
 
 `stop()` is the off switch: it drops the timer and the fast-user-switching observers, and clears the
 `isCapturing` flag that `prepareForTinycastPasteboardMutation` reads — so a paste Tinycast performs

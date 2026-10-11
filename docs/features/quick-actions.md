@@ -223,7 +223,9 @@ apps and VS Code otherwise answer every attribute with nothing.
 
 When Accessibility yields nothing, `TextInjector.copySelection` borrows a ⌘C: snapshot the
 pasteboard, pause clipboard history, synthesise the chord, wait for `changeCount` to **move**, read,
-restore, resume. The pause keeps the borrowed copy out of history. It lives on
+restore, resume. The pause keeps the borrowed copy out of history. Only one borrow runs at a time:
+a second would snapshot the first one's copy and read its restore as a selection, so it returns
+nothing instead. It lives on
 `TextInjector` because the pasteboard has one owner — the same lease, queue and `ClipboardManager`
 coordination a paste needs, and a second owner would race it.
 

@@ -21,7 +21,7 @@ final class ClipboardManager {
     private var sessionTokens: [NotificationToken] = []
     private var lastChangeCount = 0
     private var isCapturing = false
-    private var capturePauses = 0
+    private var isCapturePaused = false
 
     init(store: ClipboardStore, settings: AppSettings) {
         self.store = store
@@ -95,11 +95,11 @@ final class ClipboardManager {
     /// For a ⌘C Tinycast sends itself, whose copy is read and restored but never recorded.
     func pauseCapture() {
         prepareForTinycastPasteboardMutation()
-        capturePauses += 1
+        isCapturePaused = true
     }
 
     func resumeCapture() {
-        capturePauses -= 1
+        isCapturePaused = false
     }
 
     // Load-bearing: a mismatched count means a foreign write the next poll must still see.
@@ -139,7 +139,7 @@ final class ClipboardManager {
 
     private func poll() {
         let pb = NSPasteboard.general
-        guard capturePauses == 0, pb.changeCount != lastChangeCount else { return }
+        guard !isCapturePaused, pb.changeCount != lastChangeCount else { return }
         lastChangeCount = pb.changeCount
 
         if pb.types?.contains(Self.internalType) == true { return }
