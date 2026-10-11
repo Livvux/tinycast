@@ -226,8 +226,10 @@ bound with `dlsym` in `Platform/HIDEventSystem.swift`, the only file that touche
 drops a symbol reports `.remapUnavailable` instead of crashing. Each keyboard's original Caps Lock
 mapping is preserved. A matching entry already placed by another tool is left unowned; Tinycast only
 restores an original while the keyboard still carries its own installed mapping. Entries for other
-keys and later replacements by other tools survive teardown. Every required HID write must succeed;
-a rejected write cannot report an active remap.
+keys and later replacements by other tools survive teardown. A keyboard that rejects the write is
+skipped and stays plain Caps Lock; only every connected keyboard rejecting it reports
+`.remapUnavailable`. With no keyboard connected, as after wake before a Bluetooth keyboard
+reconnects, the remap succeeds and hot plug places it.
 
 Recovery records are saved before each write, keyed by the HID service's registry ID and the current
 boot session. A route change records both its old and new mappings until the write completes. A crash

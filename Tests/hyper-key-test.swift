@@ -165,7 +165,7 @@ struct HyperKeyTest {
         fixture { remapper, defaults in
             HIDEventSystem.connect(2)
             HIDEventSystem.rejectedKeyboards = [2]
-            check("a partially rejected remap reports failure", !remapper.apply(toF18))
+            check("a keyboard that rejects the remap is skipped", remapper.apply(toF18))
             check(
                 "only accepted writes change keyboards",
                 HIDEventSystem.mappings[1] == [toF18] && HIDEventSystem.mappings[2] == nil)
@@ -270,15 +270,18 @@ struct HyperKeyTest {
         }
         fixture { remapper, _ in
             HIDEventSystem.devices = []
-            check("no keyboards cannot report an active remap", !remapper.apply(toF18))
+            check("no keyboard yet still succeeds", remapper.apply(toF18))
+            HIDEventSystem.connect(1)
+            check("the first keyboard to connect gets the remap", HIDEventSystem.mappings[1] == [toF18])
         }
         fixture { remapper, _ in
             remapper.apply(toF18)
-            var failures = 0
-            remapper.onFailure = { failures += 1 }
             HIDEventSystem.rejectedKeyboards = [2]
             HIDEventSystem.connect(2)
-            check("a rejected hot-plug write reports failure", failures == 1)
+            check(
+                "a rejected hot-plug write leaves the other keyboards remapped",
+                remapper.mapping == toF18 && HIDEventSystem.mappings[1] == [toF18]
+                    && HIDEventSystem.mappings[2] == nil)
         }
     }
 

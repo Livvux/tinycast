@@ -26,7 +26,6 @@ final class KeyboardRemapper {
 
     private(set) var mapping: HIDKeyMapping?
     private(set) var sawKarabinerConflict = false
-    var onFailure: (() -> Void)?
 
     private let defaults: UserDefaults
     private let bootSessionID: String?
@@ -75,7 +74,7 @@ final class KeyboardRemapper {
             guard let self, let system,
                 mapping != nil || savedMappings[String(keyboard.registryID)] != nil
             else { return }
-            if update(keyboard, in: system) == .failed { onFailure?() }
+            update(keyboard, in: system)
         }
         system.watchConnections()
         return system
@@ -86,19 +85,21 @@ final class KeyboardRemapper {
         guard let system else { return (false, false) }
         let keyboards = system.keyboards
         sawKarabinerConflict = false
-        var succeeded = mapping == nil || !keyboards.isEmpty
+        var failed = 0
         var changed = false
         for keyboard in keyboards {
             switch update(keyboard, in: system) {
             case .unchanged: break
             case .changed: changed = true
-            case .failed: succeeded = false
+            case .failed: failed += 1
             }
         }
-        if mapping == nil, !savedMappings.isEmpty { succeeded = false }
+        // A keyboard that refuses is skipped, and one connected later is placed by hot plug.
+        let succeeded = mapping == nil ? savedMappings.isEmpty : keyboards.isEmpty || failed < keyboards.count
         return (succeeded, changed)
     }
 
+    @discardableResult
     private func update(_ keyboard: HIDEventSystem.Keyboard, in system: HIDEventSystem) -> Update {
         let id = String(keyboard.registryID)
         let existing = system.keyMappings(of: keyboard)
