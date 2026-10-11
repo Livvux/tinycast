@@ -41,6 +41,7 @@ final class HyperKeyManager: HealthCheckable {
     func start() {
         secureInput.onChange = { [weak self] _ in self?.secureInputChanged() }
         tap.onUnmappedCapsLock = { [weak self] in self?.repairRemap() }
+        remapper.onFailure = { [weak self] in self?.stop(.remapUnavailable) }
         remapper.clearLeftovers()
         observeSettings()
         observeSystem()
@@ -74,6 +75,7 @@ final class HyperKeyManager: HealthCheckable {
             capsLockMappingConflicts: key == .capsLock
                 ? HyperKeyConflictScanner.capsLockRemaps().map { name(of: $0, among: keyboards) }
                 : [],
+            secureInputCompatibilityActive: status == .active && isSecureInputCompatible,
             secureInput: secureInput.report())
     }
 

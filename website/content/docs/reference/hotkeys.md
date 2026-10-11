@@ -130,9 +130,10 @@ shows a message saying why. Diagnostics names the app most likely holding Secure
 
 With Caps Lock as your Hyper key, turn on **Secure Input Compatibility** to keep **Tinycast's own**
 Hyper shortcuts working there. Caps Lock then acts as **Right Control**, so while it's on, the Right
-Control key also works as Hyper and its own shortcuts are reserved. Inside Secure Input, Control plus
-a shortcut's key runs that Hyper shortcut, so those Control combos are taken while it lasts. Other
-apps' Hyper shortcuts still don't work inside Secure Input.
+Control key also works as Hyper and its own shortcuts are reserved. Inside Secure Input, **Right
+Control** plus a shortcut's key runs that Hyper shortcut. Left Control never triggers Hyper; existing
+Tinycast Control shortcuts still work with Left Control. The Control combinations used by Hyper are
+reserved while Secure Input lasts. Other apps' Hyper shortcuts still don't work there.
 
 ## Hiding versus turning off
 

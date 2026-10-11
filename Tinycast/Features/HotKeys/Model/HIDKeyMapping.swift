@@ -1,7 +1,7 @@
 import Foundation
 
 /// One `UserKeyMapping` entry, usages packed as `page << 32 | usage` the way IOKit stores them.
-struct HIDKeyMapping: Hashable, Sendable {
+struct HIDKeyMapping: Hashable, Codable, Sendable {
     let source: UInt64
     let destination: UInt64
 
@@ -11,9 +11,6 @@ struct HIDKeyMapping: Hashable, Sendable {
 
     static let capsLockToF18 = HIDKeyMapping(source: capsLock, destination: f18)
     static let capsLockToRightControl = HIDKeyMapping(source: capsLock, destination: rightControl)
-
-    /// Every entry the Hyper Key places, so one left behind by any earlier state is found again.
-    static let hyperKeyMappings: Set<HIDKeyMapping> = [capsLockToF18, capsLockToRightControl]
 
     static let sourceKey = "HIDKeyboardModifierMappingSrc"
     static let destinationKey = "HIDKeyboardModifierMappingDst"
@@ -38,10 +35,13 @@ struct HIDKeyMapping: Hashable, Sendable {
         (value as? [Any] ?? []).compactMap { ($0 as? [String: Any]).flatMap(HIDKeyMapping.init) }
     }
 
-    static func reconciled(_ existing: [HIDKeyMapping], wanting wanted: HIDKeyMapping?) -> [HIDKeyMapping] {
-        let cleared = existing.filter { !hyperKeyMappings.contains($0) }
-        guard let wanted else { return cleared }
-        return cleared.filter { $0.source != wanted.source } + [wanted]
+    func replacingSource(in existing: [HIDKeyMapping]) -> [HIDKeyMapping] {
+        existing.filter { $0.source != source } + [self]
+    }
+
+    func restoring(_ original: [HIDKeyMapping], in existing: [HIDKeyMapping]) -> [HIDKeyMapping] {
+        guard existing.filter({ $0.source == source }) == [self] else { return existing }
+        return existing.filter { $0.source != source } + original
     }
 
     func conflicts(with existing: [HIDKeyMapping]) -> Bool {

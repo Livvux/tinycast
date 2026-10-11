@@ -70,7 +70,7 @@ struct HyperKeySettingsSection: View {
                     SettingsRowTitle(.generalHyperKey, "Secure Input Compatibility")
                     Text(
                         "Tinycast's Hyper shortcuts also work in password fields and secure terminals, "
-                            + "where ⌃ with the same key triggers them. "
+                            + "where Right Control (⌃) with the same key triggers them. "
                             + "While on, Right Control (⌃) acts as the Hyper Key too.")
                 }
             }
@@ -91,51 +91,52 @@ struct HyperKeySettingsSection: View {
                 })
         }
     }
-}
 
-private struct HyperKeyStatusRow: View {
-    let status: HyperKeyManager.Status
-    let isShowingDiagnostics: Bool
-    let toggleDiagnostics: () -> Void
+    private struct HyperKeyStatusRow: View {
+        let status: HyperKeyManager.Status
+        let isShowingDiagnostics: Bool
+        let toggleDiagnostics: () -> Void
 
-    var body: some View {
-        SettingsRow(title: "Status", subtitle: detail, subtitleLineLimit: 2) {
-            HStack(spacing: Theme.Spacing.sm) {
-                ColorDot(color: tint)
-                Text(title).foregroundStyle(.secondary)
-                if status == .needsAccessibility {
-                    Button("Grant Access…") { Permissions.openAccessibilitySettings() }
+        var body: some View {
+            SettingsRow(title: "Status", subtitle: detail, subtitleLineLimit: 2) {
+                HStack(spacing: Theme.Spacing.sm) {
+                    ColorDot(color: tint)
+                    Text(title).foregroundStyle(.secondary)
+                    if status == .needsAccessibility {
+                        Button("Grant Access…") { Permissions.openAccessibilitySettings() }
+                    }
+                    Button(
+                        isShowingDiagnostics ? "Hide Diagnostics" : "Diagnostics…", action: toggleDiagnostics)
                 }
-                Button(isShowingDiagnostics ? "Hide Diagnostics" : "Diagnostics…", action: toggleDiagnostics)
             }
         }
-    }
 
-    private var title: String {
-        switch status {
-        case .off: return "Off"
-        case .active: return "Active"
-        case .needsAccessibility: return "Needs Accessibility"
-        case .blocked: return "Blocked"
-        case .remapUnavailable: return "Unavailable"
-        case .paused: return "Paused"
+        private var title: String {
+            switch status {
+            case .off: return "Off"
+            case .active: return "Active"
+            case .needsAccessibility: return "Needs Accessibility"
+            case .blocked: return "Blocked"
+            case .remapUnavailable: return "Unavailable"
+            case .paused: return "Paused"
+            }
         }
-    }
 
-    private var detail: String? {
-        switch status {
-        case .blocked(let appName): return "\(appName) runs its own Hyper Key. Quit it to use this one."
-        case .remapUnavailable: return "macOS refused to remap the keyboard."
-        case .paused: return "Handed back while the Mac sleeps, locks or switches user."
-        case .off, .active, .needsAccessibility: return nil
+        private var detail: String? {
+            switch status {
+            case .blocked(let appName): return "\(appName) runs its own Hyper Key. Quit it to use this one."
+            case .remapUnavailable: return "macOS refused to remap the keyboard."
+            case .paused: return "Handed back while the Mac sleeps, locks or switches user."
+            case .off, .active, .needsAccessibility: return nil
+            }
         }
-    }
 
-    private var tint: Color {
-        switch status {
-        case .active: return Theme.Colors.success
-        case .needsAccessibility, .paused: return Theme.Colors.warning
-        case .off, .blocked, .remapUnavailable: return Theme.Colors.destructive
+        private var tint: Color {
+            switch status {
+            case .active: return Theme.Colors.success
+            case .needsAccessibility, .paused: return Theme.Colors.warning
+            case .off, .blocked, .remapUnavailable: return Theme.Colors.destructive
+            }
         }
     }
 }

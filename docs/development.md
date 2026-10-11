@@ -72,7 +72,8 @@ Consequences worth knowing:
   and the `Tinycast Self-Signed` identity keep the TCC grant alive.
 - Don't bind the same global hotkey in both — whichever registered first wins.
 - The Hyper Key's Caps Lock remap lives on the keyboards, which are **shared, not per-bundle**:
-  quitting one build takes it off for the other, which then needs a relaunch to restore it.
+  enable Hyper in one build at a time so their keyboard owners do not compete. An identical mapping
+  already installed by another build is left unowned.
 
 ## Editor
 

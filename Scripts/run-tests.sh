@@ -548,7 +548,19 @@ run slow -O raycast-test   Tinycast/Features/Backup/Model/RaycastImportError.swi
 run settings-backup-test   Tinycast/Features/Settings/AppSettingsKey.swift \
                            Tinycast/Features/Backup/Model/SettingsBackupCoverage.swift
 run hyper-key-test         Tinycast/Features/HotKeys/Model/HIDKeyMapping.swift \
-                           Tinycast/Features/HotKeys/Model/HyperKeyConflictPolicy.swift
+                           Tinycast/Features/HotKeys/Model/HyperKeyConflictPolicy.swift \
+                           Tinycast/Features/HotKeys/Service/KeyboardRemapper.swift \
+                           Tests/hyper-key-fixtures.swift
+run hotkey-dispatch-test   Tinycast/Features/HotKeys/Model/DoubleTapModifier.swift \
+                           Tinycast/Features/HotKeys/Model/ModifierKey.swift \
+                           Tinycast/Features/HotKeys/Model/HotKeyBinding.swift \
+                           Tinycast/Features/HotKeys/Model/HyperKey.swift \
+                           Tinycast/Features/HotKeys/Model/HIDKeyMapping.swift \
+                           Tinycast/Features/HotKeys/Model/HotKeyAction.swift \
+                           Tinycast/Features/HotKeys/Service/KeyShortcut.swift \
+                           Tinycast/Features/HotKeys/Service/HotKeyManager.swift \
+                           Tinycast/Platform/ASCIIKeyboardLayout.swift \
+                           Tests/hotkey-dispatch-fixtures.swift
 run settings-file-test     Tinycast/Features/Settings/Model/*.swift \
                            Tinycast/Features/Settings/Service/SettingsFileMonitor.swift \
                            Tinycast/Features/Settings/Service/SettingsFileRepository.swift \

@@ -22,6 +22,7 @@ struct HyperKeyDiagnostics: Equatable, Sendable {
     let karabinerVirtualKeyboards: [String]
     let karabinerConflict: Bool
     let capsLockMappingConflicts: [String]
+    let secureInputCompatibilityActive: Bool
     /// Nil while Secure Input is off.
     let secureInput: SecureInput?
 }

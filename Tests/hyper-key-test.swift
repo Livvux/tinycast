@@ -1,8 +1,9 @@
 import Foundation
 
 @main
+@MainActor
 struct HyperKeyTest {
-    nonisolated(unsafe) static var failures = 0
+    static var failures = 0
 
     static func main() {
         keyMappingReconcile()
@@ -11,6 +12,7 @@ struct HyperKeyTest {
         knownApps()
         modifierKeysPreferences()
         karabinerConfig()
+        remapperLifecycle()
         print(failures == 0 ? "All hyper key checks passed" : "\(failures) hyper key check(s) failed")
         if failures > 0 { exit(1) }
     }
@@ -30,25 +32,25 @@ struct HyperKeyTest {
 
     static func keyMappingReconcile() {
         let otherCapsLock = HIDKeyMapping(source: HIDKeyMapping.capsLock, destination: 0x7_0000_0029)
-        check("placing on an empty keyboard adds just ours", HIDKeyMapping.reconciled([], wanting: toF18) == [toF18])
+        check("placing on an empty keyboard adds just ours", toF18.replacingSource(in: []) == [toF18])
         check(
             "placing keeps another tool's entry for a different key",
-            HIDKeyMapping.reconciled([otherTool], wanting: toF18) == [otherTool, toF18])
+            toF18.replacingSource(in: [otherTool]) == [otherTool, toF18])
         check(
             "placing replaces another entry for the same key",
-            HIDKeyMapping.reconciled([otherCapsLock, otherTool], wanting: toF18) == [otherTool, toF18])
+            toF18.replacingSource(in: [otherCapsLock, otherTool]) == [otherTool, toF18])
         check(
             "switching routes swaps one Hyper entry for the other",
-            HIDKeyMapping.reconciled([toF18, otherTool], wanting: toRightControl) == [otherTool, toRightControl])
+            toRightControl.replacingSource(in: [toF18, otherTool]) == [otherTool, toRightControl])
         check(
             "an entry already in place is left as it is",
-            HIDKeyMapping.reconciled([otherTool, toF18], wanting: toF18) == [otherTool, toF18])
+            toF18.replacingSource(in: [otherTool, toF18]) == [otherTool, toF18])
         check(
-            "removing takes every Hyper entry, even one an earlier route left",
-            HIDKeyMapping.reconciled([toRightControl, otherTool, toF18], wanting: nil) == [otherTool])
+            "restoring removes only the mapping still owned",
+            toF18.restoring([], in: [otherTool, toF18]) == [otherTool])
         check(
-            "removing leaves another tool's Caps Lock entry alone",
-            HIDKeyMapping.reconciled([otherCapsLock], wanting: nil) == [otherCapsLock])
+            "restoring leaves another tool's replacement alone",
+            toF18.restoring([], in: [otherCapsLock]) == [otherCapsLock])
     }
 
     static func keyMappingConflicts() {
@@ -116,6 +118,168 @@ struct HyperKeyTest {
         check(
             "no preferences means no Caps Lock conflicts",
             HyperKeyConflictPolicy.capsLockRemaps(in: [:]).isEmpty)
+    }
+
+    static func remapperLifecycle() {
+        let recoveryKey = "hyperKeyKeyboardMappings"
+        func fixture(_ body: (KeyboardRemapper, UserDefaults) -> Void) {
+            HIDEventSystem.reset()
+            let domain = "tinycast.hyper-key-test.\(UUID())"
+            let defaults = UserDefaults(suiteName: domain)!
+            defer { defaults.removePersistentDomain(forName: domain) }
+            body(KeyboardRemapper(defaults: defaults), defaults)
+        }
+        fixture { remapper, defaults in
+            HIDEventSystem.mappings[1] = [otherTool]
+            check("enable succeeds", remapper.apply(toF18))
+            check("enable preserves unrelated mappings", HIDEventSystem.mappings[1] == [otherTool, toF18])
+            check("enable journals recovery", defaults.data(forKey: recoveryKey) != nil)
+            let writes = HIDEventSystem.writeCount
+            check(
+                "idempotent apply avoids writes", remapper.apply(toF18) && HIDEventSystem.writeCount == writes
+            )
+            HIDEventSystem.connect(2)
+            check("hot plug remaps new keyboards", HIDEventSystem.mappings[2] == [toF18])
+            HIDEventSystem.mappings[2] = []
+            check(
+                "repair restores a lost mapping", remapper.repair() && HIDEventSystem.mappings[2] == [toF18])
+            check("repair avoids writes when correct", !remapper.repair())
+            check("route switching succeeds", remapper.apply(toRightControl))
+            check(
+                "route switching reaches both keyboards",
+                HIDEventSystem.mappings.values.allSatisfy {
+                    $0.contains(toRightControl) && !$0.contains(toF18)
+                })
+            check("cleanup succeeds", remapper.apply(nil))
+            check(
+                "cleanup preserves unrelated mappings",
+                HIDEventSystem.mappings[1] == [otherTool] && HIDEventSystem.mappings[2] == [])
+            check("completed cleanup removes recovery", defaults.data(forKey: recoveryKey) == nil)
+        }
+        fixture { remapper, _ in
+            HIDEventSystem.rejectedKeyboards = [1]
+            check("rejected writes report failure", !remapper.apply(toF18))
+            HIDEventSystem.rejectedKeyboards = []
+            check("the same route retries after failure", remapper.apply(toF18))
+        }
+        fixture { remapper, defaults in
+            HIDEventSystem.connect(2)
+            HIDEventSystem.rejectedKeyboards = [2]
+            check("a partially rejected remap reports failure", !remapper.apply(toF18))
+            check(
+                "only accepted writes change keyboards",
+                HIDEventSystem.mappings[1] == [toF18] && HIDEventSystem.mappings[2] == nil)
+            check(
+                "partial success can be cleaned up", remapper.apply(nil) && HIDEventSystem.mappings[1] == [])
+            check("partial cleanup removes recovery", defaults.data(forKey: recoveryKey) == nil)
+        }
+        fixture { remapper, defaults in
+            remapper.apply(toF18)
+            HIDEventSystem.rejectedKeyboards = [1]
+            check("rejected cleanup reports failure", !remapper.apply(nil))
+            check("rejected cleanup keeps recovery", defaults.data(forKey: recoveryKey) != nil)
+            HIDEventSystem.rejectedKeyboards = []
+            KeyboardRemapper(defaults: defaults).clearLeftovers()
+            check("relaunch retries rejected cleanup", HIDEventSystem.mappings[1] == [])
+            check("relaunch clears successful recovery", defaults.data(forKey: recoveryKey) == nil)
+        }
+        fixture { remapper, defaults in
+            let original = HIDKeyMapping(source: HIDKeyMapping.capsLock, destination: 0x7_0000_0029)
+            HIDEventSystem.mappings[1] = [original, otherTool]
+            remapper.apply(toF18)
+            remapper.apply(toRightControl)
+            check(
+                "disable restores displaced Caps Lock mapping",
+                remapper.apply(nil) && Set(HIDEventSystem.mappings[1] ?? []) == [original, otherTool])
+            remapper.apply(toF18)
+            KeyboardRemapper(defaults: defaults).clearLeftovers()
+            check(
+                "crash recovery restores displaced mapping",
+                Set(HIDEventSystem.mappings[1] ?? []) == [original, otherTool])
+        }
+        fixture { remapper, _ in
+            HIDEventSystem.mappings[1] = [toF18, otherTool]
+            remapper.apply(toF18)
+            remapper.apply(nil)
+            check(
+                "an identical pre-existing mapping is never owned",
+                HIDEventSystem.mappings[1] == [toF18, otherTool])
+            remapper.apply(toRightControl)
+            remapper.apply(nil)
+            check(
+                "another tool's Hyper mapping is restored",
+                Set(HIDEventSystem.mappings[1] ?? []) == [toF18, otherTool])
+        }
+        fixture { remapper, _ in
+            remapper.apply(toF18)
+            let replacement = HIDKeyMapping(source: HIDKeyMapping.capsLock, destination: 0x7_0000_0029)
+            HIDEventSystem.mappings[1] = [replacement, otherTool]
+            remapper.apply(nil)
+            check(
+                "cleanup preserves another tool's later replacement",
+                HIDEventSystem.mappings[1] == [replacement, otherTool])
+        }
+        fixture { remapper, defaults in
+            remapper.apply(toF18)
+            var journal: Data?
+            HIDEventSystem.beforeWrite = { journal = defaults.data(forKey: recoveryKey) }
+            remapper.apply(toRightControl)
+            HIDEventSystem.beforeWrite = nil
+            for installed in [toF18, toRightControl] {
+                defaults.set(journal, forKey: recoveryKey)
+                HIDEventSystem.mappings[1] = [installed, otherTool]
+                KeyboardRemapper(defaults: defaults).clearLeftovers()
+                check(
+                    "route-change crash recovers \(installed.destination)",
+                    HIDEventSystem.mappings[1] == [otherTool])
+            }
+        }
+        fixture { remapper, defaults in
+            remapper.apply(toF18)
+            HIDEventSystem.devices = []
+            check(
+                "disconnected keyboard keeps recovery pending",
+                !remapper.apply(nil) && defaults.data(forKey: recoveryKey) != nil)
+            HIDEventSystem.connect(1)
+            check(
+                "reconnection completes deferred cleanup",
+                HIDEventSystem.mappings[1] == [] && defaults.data(forKey: recoveryKey) == nil)
+        }
+        fixture { remapper, defaults in
+            remapper.apply(toF18)
+            guard let data = defaults.data(forKey: recoveryKey),
+                var recovery = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            else {
+                check("recovery journal decodes", false)
+                return
+            }
+            recovery["bootSessionID"] = "previous-boot"
+            guard let previousBoot = try? JSONSerialization.data(withJSONObject: recovery) else {
+                check("previous-boot journal encodes", false)
+                return
+            }
+            defaults.set(previousBoot, forKey: recoveryKey)
+            KeyboardRemapper(defaults: defaults).clearLeftovers()
+            check(
+                "recovery from another boot cannot claim a reused registry ID",
+                HIDEventSystem.mappings[1] == [toF18])
+        }
+        fixture { remapper, _ in
+            HIDEventSystem.available = false
+            check("missing HID SPI reports failure", !remapper.apply(toF18))
+        }
+        fixture { remapper, _ in
+            HIDEventSystem.devices = []
+            check("no keyboards cannot report an active remap", !remapper.apply(toF18))
+        }
+        fixture { remapper, _ in
+            remapper.apply(toF18)
+            var failures = 0
+            remapper.onFailure = { failures += 1 }
+            HIDEventSystem.rejectedKeyboards = [2]
+            HIDEventSystem.connect(2)
+            check("a rejected hot-plug write reports failure", failures == 1)
+        }
     }
 
     static func karabinerConfig() {

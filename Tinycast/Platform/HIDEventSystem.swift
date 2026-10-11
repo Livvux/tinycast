@@ -1,22 +1,12 @@
 import Foundation
 import IOKit.hid
 
-private func hidServiceMatched(
-    target: UnsafeMutableRawPointer?, refcon: UnsafeMutableRawPointer?,
-    service: UnsafeMutableRawPointer?
-) {
-    guard let target, let service else { return }
-    let system = Unmanaged<HIDEventSystem>.fromOpaque(target).takeUnretainedValue()
-    // Scheduled on the main queue, so the pointer never leaves the thread it arrived on.
-    nonisolated(unsafe) let matched = service
-    MainActor.assumeIsolated { system.serviceMatched(matched) }
-}
-
 /// The private HID SPI behind `hidutil`. See docs/features/hotkeys.md#per-keyboard-remapping.
 @MainActor
 final class HIDEventSystem {
     struct Keyboard {
         fileprivate let service: AnyObject
+        let registryID: UInt64
         let name: String
         let vendorID: Int
         let productID: Int
@@ -69,7 +59,12 @@ final class HIDEventSystem {
         guard !isWatchingConnections else { return }
         isWatchingConnections = true
         functions.registerDeviceMatching(
-            opaque(client), hidServiceMatched, Unmanaged.passUnretained(self).toOpaque(), nil)
+            opaque(client),
+            { @MainActor target, _, service in
+                guard let target, let service else { return }
+                let system = Unmanaged<HIDEventSystem>.fromOpaque(target).takeUnretainedValue()
+                system.serviceMatched(service)
+            }, Unmanaged.passUnretained(self).toOpaque(), nil)
         functions.scheduleWithDispatchQueue(opaque(client), opaque(DispatchQueue.main))
     }
 
@@ -85,8 +80,12 @@ final class HIDEventSystem {
             ) != 0
         else { return nil }
         let object = Unmanaged<AnyObject>.fromOpaque(service).takeUnretainedValue()
+        guard let registryID = functions.registryID(service)?.takeUnretainedValue() as? NSNumber else {
+            return nil
+        }
         return Keyboard(
             service: object,
+            registryID: registryID.uint64Value,
             name: property(Property.product, of: object) as? String ?? "Keyboard",
             vendorID: (property(Property.vendorID, of: object) as? NSNumber)?.intValue ?? 0,
             productID: (property(Property.productID, of: object) as? NSNumber)?.intValue ?? 0)
@@ -117,6 +116,7 @@ private struct Functions {
     typealias ConformsTo = @convention(c) (UnsafeMutableRawPointer, UInt32, UInt32) -> boolean_t
     typealias CopyProperty =
         @convention(c) (UnsafeMutableRawPointer, CFString) -> Unmanaged<AnyObject>?
+    typealias RegistryID = @convention(c) (UnsafeMutableRawPointer) -> Unmanaged<AnyObject>?
     typealias SetProperty =
         @convention(c) (UnsafeMutableRawPointer, CFString, AnyObject) -> DarwinBoolean
     typealias RegisterDeviceMatching =
@@ -131,6 +131,7 @@ private struct Functions {
     let copyServices: CopyServices
     let conformsTo: ConformsTo
     let copyProperty: CopyProperty
+    let registryID: RegistryID
     let setProperty: SetProperty
     let registerDeviceMatching: RegisterDeviceMatching
     let scheduleWithDispatchQueue: QueueScheduling
@@ -148,6 +149,7 @@ private struct Functions {
             let copyServices: CopyServices = symbol("IOHIDEventSystemClientCopyServices"),
             let conformsTo: ConformsTo = symbol("IOHIDServiceClientConformsTo"),
             let copyProperty: CopyProperty = symbol("IOHIDServiceClientCopyProperty"),
+            let registryID: RegistryID = symbol("IOHIDServiceClientGetRegistryID"),
             let setProperty: SetProperty = symbol("IOHIDServiceClientSetProperty"),
             let registerDeviceMatching: RegisterDeviceMatching = symbol(
                 "IOHIDEventSystemClientRegisterDeviceMatchingCallback"),
@@ -160,6 +162,7 @@ private struct Functions {
         self.copyServices = copyServices
         self.conformsTo = conformsTo
         self.copyProperty = copyProperty
+        self.registryID = registryID
         self.setProperty = setProperty
         self.registerDeviceMatching = registerDeviceMatching
         self.scheduleWithDispatchQueue = scheduleWithDispatchQueue

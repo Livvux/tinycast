@@ -17,7 +17,8 @@ struct HyperKeyDiagnosticsSection: View {
             SettingsRow(title: "Run Loop Source") { optional(diagnostics.runLoopSourceValid) }
             if let secureInput = diagnostics.secureInput {
                 SettingsRow(title: "Secure Input", subtitle: describe(secureInput), subtitleLineLimit: 4) {
-                    DiagnosticValue(text: "Active", tone: .invalid)
+                    DiagnosticValue(
+                        text: "Active", tone: diagnostics.secureInputCompatibilityActive ? .valid : .invalid)
                 }
             }
             if diagnostics.isActive {
@@ -93,57 +94,63 @@ struct HyperKeyDiagnosticsSection: View {
 
     /// macOS often names the wrong holder, so the likely ones lead and its claim is hedged.
     private func describe(_ secureInput: HyperKeyDiagnostics.SecureInput) -> String {
-        var sentences = ["Key presses can't reach the Hyper Key while Secure Input is on."]
+        var sentences = [
+            diagnostics.secureInputCompatibilityActive
+                ? "Tinycast's Hyper shortcuts use Right Control while Secure Input is on."
+                : "Key presses can't reach the Hyper Key while Secure Input is on."
+        ]
         if !secureInput.likelyOwners.isEmpty {
             sentences.append("Probably \(secureInput.likelyOwners.joined(separator: " or ")).")
         }
         if let owner = secureInput.reportedOwner {
             sentences.append("macOS names \(owner), which isn't always right.")
         }
-        sentences.append(
-            secureInput.ownerIsLoginWindow
-                ? "Logging out and back in turns it off."
-                : "Closing that app turns it off.")
+        if !diagnostics.secureInputCompatibilityActive {
+            sentences.append(
+                secureInput.ownerIsLoginWindow
+                    ? "Logging out and back in turns it off."
+                    : "Closing that app turns it off.")
+        }
         return sentences.joined(separator: " ")
     }
-}
 
-private enum DiagnosticTone {
-    case valid, invalid, warning, neutral
+    private enum DiagnosticTone {
+        case valid, invalid, warning, neutral
 
-    var color: Color {
-        switch self {
-        case .valid: return Theme.Colors.success
-        case .invalid: return Theme.Colors.destructive
-        case .warning: return Theme.Colors.warning
-        case .neutral: return .secondary
-        }
-    }
-}
-
-private struct DiagnosticValue: View {
-    let text: String
-    let tone: DiagnosticTone
-
-    var body: some View {
-        HStack(spacing: Theme.Spacing.sm) {
-            Text(text).foregroundStyle(tone.color)
-            ColorDot(color: tone.color)
-        }
-    }
-}
-
-private struct DiagnosticList: View {
-    let items: [(String, DiagnosticTone)]
-    let empty: (String, DiagnosticTone)?
-
-    var body: some View {
-        VStack(alignment: .trailing, spacing: Theme.Spacing.xs) {
-            if items.isEmpty, let empty {
-                DiagnosticValue(text: empty.0, tone: empty.1)
+        var color: Color {
+            switch self {
+            case .valid: return Theme.Colors.success
+            case .invalid: return Theme.Colors.destructive
+            case .warning: return Theme.Colors.warning
+            case .neutral: return .secondary
             }
-            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                DiagnosticValue(text: item.0, tone: item.1)
+        }
+    }
+
+    private struct DiagnosticValue: View {
+        let text: String
+        let tone: DiagnosticTone
+
+        var body: some View {
+            HStack(spacing: Theme.Spacing.sm) {
+                Text(text).foregroundStyle(tone.color)
+                ColorDot(color: tone.color)
+            }
+        }
+    }
+
+    private struct DiagnosticList: View {
+        let items: [(String, DiagnosticTone)]
+        let empty: (String, DiagnosticTone)?
+
+        var body: some View {
+            VStack(alignment: .trailing, spacing: Theme.Spacing.xs) {
+                if items.isEmpty, let empty {
+                    DiagnosticValue(text: empty.0, tone: empty.1)
+                }
+                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                    DiagnosticValue(text: item.0, tone: item.1)
+                }
             }
         }
     }

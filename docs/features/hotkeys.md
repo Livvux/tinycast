@@ -223,17 +223,18 @@ installed or repaired.
 
 `KeyboardRemapper` writes through `HIDEventSystem`, the private IOKit SPI `hidutil` itself drives. It is
 bound with `dlsym` in `Platform/HIDEventSystem.swift`, the only file that touches it, so a macOS that
-drops a symbol reports `.remapUnavailable` instead of crashing. Remapping each keyboard rather than the
-whole system is what lets it **merge** (`HIDKeyMapping.reconciled`): another tool's entry for another key
-survives, ours replaces any entry for the same source key, a keyboard that already matches is not
-rewritten, and teardown removes both Hyper Key entries, so one an earlier route left goes too. The
-client is created on first use and kept, because its device-matching callback is what remaps a
-keyboard plugged in or reconnected later.
+drops a symbol reports `.remapUnavailable` instead of crashing. Each keyboard's original Caps Lock
+mapping is preserved. A matching entry already placed by another tool is left unowned; Tinycast only
+restores an original while the keyboard still carries its own installed mapping. Entries for other
+keys and later replacements by other tools survive teardown. Every required HID write must succeed;
+a rejected write cannot report an active remap.
 
-A crash or force quit skips teardown, and the remap outlives the process. A UserDefaults marker is set
-before the first write and cleared once the mapping is off, so the next launch takes a leftover off
-even when the Hyper Key is now None. Without the marker nothing is swept, so a Caps Lock → F18 mapping
-another tool placed is never touched.
+Recovery records are saved before each write, keyed by the HID service's registry ID and the current
+boot session. A route change records both its old and new mappings until the write completes. A crash
+on either side of the write therefore restores the original, even with Hyper Key set to None on the
+next launch. Failed cleanup retains its record and is retried on relaunch or keyboard reconnection.
+Records from another boot are ignored because HID mappings do not survive a reboot. The client stays
+alive after first use so connected keyboards receive the remap or finish pending cleanup.
 
 The mapping comes off on unbind, on quit, while the Mac sleeps, while the screen is locked — a password
 typed at the lock screen needs a real Caps Lock — and while another user's session is active, and goes
@@ -302,8 +303,11 @@ Carbon hotkeys still fire inside Secure Input, and both remedies are built on th
   Hyper key, which is why physical Right Control shortcuts are reserved while it is on. Inside it,
   `HotKeyManager.setSecureInputEquivalents` registers every Hyper combo again as ⌃ plus its key
   (`KeyShortcut.secureInputEquivalent(of:)`), rebuilt with the bindings and dropped when Secure Input
-  ends. Only Tinycast's own Hyper shortcuts work there, and Carbon cannot tell the two Controls apart,
-  so a left ⌃ combo reaches an equivalent too while Secure Input is on.
+  ends. The Carbon event's device flags select Right Control without querying mutable keyboard state.
+  Left Control never triggers Hyper. An existing Tinycast Control binding shares the registration and
+  still runs from Left Control; Dictation receives the release for whichever action began the press.
+  Rebuilding or pausing registrations cancels an outstanding hold. Carbon reserves these Control
+  combinations during Secure Input even when Left Control has no Tinycast binding.
 
 ### ✦ is the notation, not a preference
 
