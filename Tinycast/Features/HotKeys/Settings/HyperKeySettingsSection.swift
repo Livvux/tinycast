@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// General ▸ Hyper Key: the key, its options, its status and, on request, its diagnostics.
 struct HyperKeySettingsSection: View {
     @Environment(AppCore.self) private var core
     @Environment(AppSettings.self) private var settings
@@ -70,7 +69,8 @@ struct HyperKeySettingsSection: View {
                 Toggle(isOn: $settings.hyperKeySecureInputCompatibility) {
                     SettingsRowTitle(.generalHyperKey, "Secure Input Compatibility")
                     Text(
-                        "Tinycast's Hyper shortcuts also work in password fields. "
+                        "Tinycast's Hyper shortcuts also work in password fields and secure terminals, "
+                            + "where ⌃ with the same key triggers them. "
                             + "While on, Right Control (⌃) acts as the Hyper Key too.")
                 }
             }

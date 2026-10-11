@@ -72,6 +72,8 @@ final class HyperKeyTap {
         didSet { if route != oldValue { cancelHold() } }
     }
 
+    var onUnmappedCapsLock: (() -> Void)?
+
     private let settings: AppSettings
     private var tapPort: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -146,10 +148,10 @@ final class HyperKeyTap {
             return decideHyperKeyEvent(
                 route: route, type: type, flagsRaw: flagsRaw, isAutorepeat: isAutorepeat)
         }
-        // Before the remap takes hold the key is still Caps Lock, whose flag is a latch, so toggle.
-        if route.key == .capsLock, keyCode == kVK_CapsLock, type == .flagsChanged {
-            let flags = transition(isDown: !hyperActive, flagsRaw: flagsRaw)
-            return .rewrite(flags: flags, keyCode: Int64(kVK_Control))
+        // A latch carries no release, so it passes as Caps Lock and the keyboard is repaired.
+        if route.remap != nil, keyCode == kVK_CapsLock, type == .flagsChanged {
+            Task { @MainActor [weak self] in self?.onUnmappedCapsLock?() }
+            return .pass
         }
         guard hyperActive else { return .pass }
         // Any other key or modifier going down while Hyper is held makes this a combo, not a tap.
@@ -187,7 +189,6 @@ final class HyperKeyTap {
         }
     }
 
-    /// Moves the hold to match the key, returning the flags its own event should carry.
     private func transition(isDown: Bool, flagsRaw: UInt64) -> UInt64 {
         if isDown {
             if !hyperActive { beginHold() }

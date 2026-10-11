@@ -9,17 +9,13 @@ final class HyperKeyManager: HealthCheckable {
         case off
         case active
         case needsAccessibility
-        /// Another app's Hyper Key holds the keyboard; ours waits for it to quit.
         case blocked(appName: String)
-        /// The HID event system refused the remap, so Caps Lock is still Caps Lock.
         case remapUnavailable
-        /// Asleep, locked or another user's session: the keyboard is handed back meanwhile.
         case paused
     }
 
     private(set) var status: Status = .off
 
-    /// A one-line problem worth a HUD: a blocking app, or Hyper pressed inside Secure Input.
     @ObservationIgnored var onProblem: ((String) -> Void)?
     @ObservationIgnored weak var healthTicker: HealthTicker?
 
@@ -29,6 +25,7 @@ final class HyperKeyManager: HealthCheckable {
     @ObservationIgnored private let remapper = KeyboardRemapper()
     @ObservationIgnored private let secureInput = SecureInputMonitor()
     @ObservationIgnored private var observers: [NotificationToken] = []
+    @ObservationIgnored private var runningAppsObservation: NSKeyValueObservation?
     @ObservationIgnored private var pauseReasons: Set<PauseReason> = []
 
     private enum PauseReason {
@@ -43,6 +40,8 @@ final class HyperKeyManager: HealthCheckable {
 
     func start() {
         secureInput.onChange = { [weak self] _ in self?.secureInputChanged() }
+        tap.onUnmappedCapsLock = { [weak self] in self?.repairRemap() }
+        remapper.clearLeftovers()
         observeSettings()
         observeSystem()
         apply()
@@ -108,6 +107,12 @@ final class HyperKeyManager: HealthCheckable {
         syncSecureInputHotKeys()
     }
 
+    /// That press latched Caps Lock on a keyboard that lost the remap, so undo it once repaired.
+    private func repairRemap() {
+        guard status == .active, remapper.repair() else { return }
+        tap.unlatchCapsLock()
+    }
+
     private var isSecureInputCompatible: Bool {
         settings.hyperKey.supportsSecureInputCompatibility && settings.hyperKeySecureInputCompatibility
     }
@@ -160,8 +165,8 @@ final class HyperKeyManager: HealthCheckable {
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
-                observeSettings()
-                apply()
+                self.observeSettings()
+                self.apply()
             }
         }
     }
@@ -184,10 +189,9 @@ final class HyperKeyManager: HealthCheckable {
             },
             observe(distributed, Notification.Name("com.apple.screenIsUnlocked")) {
                 $0.resume(.screenLocked)
-            },
-            observeBlockingApps(workspace, NSWorkspace.didLaunchApplicationNotification),
-            observeBlockingApps(workspace, NSWorkspace.didTerminateApplicationNotification)
+            }
         ]
+        observeBlockingApps()
     }
 
     private func pause(_ reason: PauseReason) {
@@ -213,18 +217,18 @@ final class HyperKeyManager: HealthCheckable {
             }, center: center)
     }
 
-    /// Only a known blocker coming or going can change the outcome, so others cost nothing.
-    private func observeBlockingApps(
-        _ center: NotificationCenter, _ name: Notification.Name
-    ) -> NotificationToken {
-        NotificationToken(
-            center.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
-                let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-                guard let bundleID = app?.bundleIdentifier,
-                    HyperKeyConflictPolicy.severity(ofBundleID: bundleID) == .blocking
-                else { return }
-                MainActor.assumeIsolated { self?.apply() }
-            }, center: center)
+    /// KVO, because launch notifications skip menu-bar apps such as the known blockers.
+    private func observeBlockingApps() {
+        runningAppsObservation = NSWorkspace.shared.observe(
+            \.runningApplications, options: [.old, .new]
+        ) { [weak self] _, change in
+            let bundleIDs = ((change.newValue ?? []) + (change.oldValue ?? [])).compactMap(\.bundleIdentifier)
+            MainActor.assumeIsolated {
+                let isBlocker = { HyperKeyConflictPolicy.severity(ofBundleID: $0) == .blocking }
+                guard bundleIDs.contains(where: isBlocker) else { return }
+                self?.apply()
+            }
+        }
     }
 
     private func name(

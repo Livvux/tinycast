@@ -1,6 +1,5 @@
 import AppKit
 
-/// Reads the machine for what fights the Hyper Key; `HyperKeyConflictPolicy` decides what counts.
 @MainActor
 enum HyperKeyConflictScanner {
     static func runningBlocker() -> String? {

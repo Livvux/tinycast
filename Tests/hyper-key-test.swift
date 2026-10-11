@@ -5,8 +5,7 @@ struct HyperKeyTest {
     nonisolated(unsafe) static var failures = 0
 
     static func main() {
-        keyMappingMerge()
-        keyMappingRemoval()
+        keyMappingReconcile()
         keyMappingConflicts()
         keyMappingParsing()
         knownApps()
@@ -25,30 +24,31 @@ struct HyperKeyTest {
         }
     }
 
-    static let toF18 = HIDKeyMapping(source: HIDKeyMapping.capsLock, destination: HIDKeyMapping.f18)
-    static let toRightControl = HIDKeyMapping(
-        source: HIDKeyMapping.capsLock, destination: HIDKeyMapping.rightControl)
+    static let toF18 = HIDKeyMapping.capsLockToF18
+    static let toRightControl = HIDKeyMapping.capsLockToRightControl
     static let otherTool = HIDKeyMapping(source: 0x7_0000_0029, destination: 0x7_0000_0035)
 
-    static func keyMappingMerge() {
-        check("merging into an empty keyboard places just ours", toF18.merged(into: []) == [toF18])
+    static func keyMappingReconcile() {
+        let otherCapsLock = HIDKeyMapping(source: HIDKeyMapping.capsLock, destination: 0x7_0000_0029)
+        check("placing on an empty keyboard adds just ours", HIDKeyMapping.reconciled([], wanting: toF18) == [toF18])
         check(
-            "merging keeps another tool's entry for a different key",
-            toF18.merged(into: [otherTool]) == [otherTool, toF18])
+            "placing keeps another tool's entry for a different key",
+            HIDKeyMapping.reconciled([otherTool], wanting: toF18) == [otherTool, toF18])
         check(
-            "merging replaces any entry for the same source key",
-            toRightControl.merged(into: [toF18, otherTool]) == [otherTool, toRightControl])
-    }
-
-    static func keyMappingRemoval() {
+            "placing replaces another entry for the same key",
+            HIDKeyMapping.reconciled([otherCapsLock, otherTool], wanting: toF18) == [otherTool, toF18])
         check(
-            "removing from a keyboard we never touched does nothing", toF18.removed(from: [otherTool]) == nil)
+            "switching routes swaps one Hyper entry for the other",
+            HIDKeyMapping.reconciled([toF18, otherTool], wanting: toRightControl) == [otherTool, toRightControl])
         check(
-            "removing takes only our entry and leaves the rest",
-            toF18.removed(from: [otherTool, toF18]) == [otherTool])
+            "an entry already in place is left as it is",
+            HIDKeyMapping.reconciled([otherTool, toF18], wanting: toF18) == [otherTool, toF18])
         check(
-            "removing a different destination for the same key leaves it alone",
-            toF18.removed(from: [toRightControl]) == nil)
+            "removing takes every Hyper entry, even one an earlier route left",
+            HIDKeyMapping.reconciled([toRightControl, otherTool, toF18], wanting: nil) == [otherTool])
+        check(
+            "removing leaves another tool's Caps Lock entry alone",
+            HIDKeyMapping.reconciled([otherCapsLock], wanting: nil) == [otherCapsLock])
     }
 
     static func keyMappingConflicts() {

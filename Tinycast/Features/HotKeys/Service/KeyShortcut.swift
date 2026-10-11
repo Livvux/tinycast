@@ -68,7 +68,6 @@ struct KeyShortcut: Hashable, Sendable {
             carbonKeyCode: carbonKeyCode, carbonModifiers: Self.carbonModifiers(from: retargeted))
     }
 
-    /// The combo Secure Input lets through for a Hyper shortcut: the chord reduced to ⌃.
     func secureInputEquivalent(of hyperChord: NSEvent.ModifierFlags) -> KeyShortcut? {
         guard modifierFlags.isSuperset(of: hyperChord) else { return nil }
         let reduced = modifierFlags.subtracting(hyperChord).union(.control)

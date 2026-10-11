@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// The Hyper Key's health and everything on this Mac that may be fighting it.
 struct HyperKeyDiagnosticsSection: View {
     let diagnostics: HyperKeyDiagnostics
     let refresh: () -> Void

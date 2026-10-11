@@ -3,7 +3,6 @@ import Foundation
 /// What counts as fighting the Hyper Key. Pure, so the app and `hyper-key-test` read one rule.
 enum HyperKeyConflictPolicy {
     enum Severity: String, Sendable {
-        /// The app installs a Hyper Key of its own, so ours refuses to start beside it.
         case blocking
         /// The app may remap the same keys; reported, never acted on.
         case warning
@@ -41,12 +40,10 @@ enum HyperKeyConflictPolicy {
         knownApps.first { $0.bundleID == bundleID }?.severity
     }
 
-    /// Karabiner seizes the real keyboards and types through this one, so it needs the remap too.
     static func isKarabinerVirtualKeyboard(named name: String) -> Bool {
         name.hasPrefix("Karabiner DriverKit VirtualHIDKeyboard")
     }
 
-    /// Keyboards whose Modifier Keys setting moves Caps Lock, which a HID remap cannot override.
     static func capsLockRemaps(in preferences: [String: Any]) -> [KeyboardIdentity] {
         preferences.compactMap { key, value in
             guard key.hasPrefix(modifierMappingPrefix),

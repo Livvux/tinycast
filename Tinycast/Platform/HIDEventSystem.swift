@@ -1,14 +1,15 @@
 import Foundation
 import IOKit.hid
 
-/// C entry point for a newly matched HID service; delivered on the main queue.
 private func hidServiceMatched(
     target: UnsafeMutableRawPointer?, refcon: UnsafeMutableRawPointer?,
     service: UnsafeMutableRawPointer?
 ) {
     guard let target, let service else { return }
     let system = Unmanaged<HIDEventSystem>.fromOpaque(target).takeUnretainedValue()
-    MainActor.assumeIsolated { system.serviceMatched(service) }
+    // Scheduled on the main queue, so the pointer never leaves the thread it arrived on.
+    nonisolated(unsafe) let matched = service
+    MainActor.assumeIsolated { system.serviceMatched(matched) }
 }
 
 /// The private HID SPI behind `hidutil`. See docs/features/hotkeys.md#per-keyboard-remapping.

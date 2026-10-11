@@ -75,12 +75,9 @@ enum HyperKeyPhysicalKey: String, CaseIterable, Identifiable, Sendable {
         if secureInputCompatible {
             return HyperKeyRoute(
                 key: self, tapKeyCode: kVK_RightControl, modifier: .rightControl,
-                remap: HIDKeyMapping(
-                    source: HIDKeyMapping.capsLock, destination: HIDKeyMapping.rightControl))
+                remap: .capsLockToRightControl)
         }
-        return HyperKeyRoute(
-            key: self, tapKeyCode: kVK_F18, modifier: nil,
-            remap: HIDKeyMapping(source: HIDKeyMapping.capsLock, destination: HIDKeyMapping.f18))
+        return HyperKeyRoute(key: self, tapKeyCode: kVK_F18, modifier: nil, remap: .capsLockToF18)
     }
 
     private var modifierKey: ModifierKey? {

@@ -1,6 +1,5 @@
 import Foundation
 
-/// A point-in-time health and conflict report, built when Settings asks for one.
 struct HyperKeyDiagnostics: Equatable, Sendable {
     struct ConflictingApp: Equatable, Sendable {
         let name: String

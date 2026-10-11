@@ -2,7 +2,6 @@ import AppKit
 import Carbon.HIToolbox
 import IOKit
 
-/// Watches macOS Secure Input, which hides every keystroke from event taps while it is on.
 @MainActor
 final class SecureInputMonitor {
     private(set) var isActive = false

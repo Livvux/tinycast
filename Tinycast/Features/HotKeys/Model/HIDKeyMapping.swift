@@ -9,6 +9,12 @@ struct HIDKeyMapping: Hashable, Sendable {
     static let f18: UInt64 = 0x7_0000_006D
     static let rightControl: UInt64 = 0x7_0000_00E4
 
+    static let capsLockToF18 = HIDKeyMapping(source: capsLock, destination: f18)
+    static let capsLockToRightControl = HIDKeyMapping(source: capsLock, destination: rightControl)
+
+    /// Every entry the Hyper Key places, so one left behind by any earlier state is found again.
+    static let hyperKeyMappings: Set<HIDKeyMapping> = [capsLockToF18, capsLockToRightControl]
+
     static let sourceKey = "HIDKeyboardModifierMappingSrc"
     static let destinationKey = "HIDKeyboardModifierMappingDst"
 
@@ -32,14 +38,10 @@ struct HIDKeyMapping: Hashable, Sendable {
         (value as? [Any] ?? []).compactMap { ($0 as? [String: Any]).flatMap(HIDKeyMapping.init) }
     }
 
-    func merged(into existing: [HIDKeyMapping]) -> [HIDKeyMapping] {
-        existing.filter { $0.source != source } + [self]
-    }
-
-    /// Nil when the table doesn't hold this mapping, so a keyboard never remapped is left alone.
-    func removed(from existing: [HIDKeyMapping]) -> [HIDKeyMapping]? {
-        guard existing.contains(self) else { return nil }
-        return existing.filter { $0 != self }
+    static func reconciled(_ existing: [HIDKeyMapping], wanting wanted: HIDKeyMapping?) -> [HIDKeyMapping] {
+        let cleared = existing.filter { !hyperKeyMappings.contains($0) }
+        guard let wanted else { return cleared }
+        return cleared.filter { $0.source != wanted.source } + [wanted]
     }
 
     func conflicts(with existing: [HIDKeyMapping]) -> Bool {

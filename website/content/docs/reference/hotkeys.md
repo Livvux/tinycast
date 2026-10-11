@@ -97,11 +97,12 @@ While Caps Lock is your Hyper key, it's remapped at the hardware level on **ever
 including one you plug in later. Any remapping another app made for a different key is kept.
 
 The remapping is removed when you choose a different key or quit Tinycast, and it never persists
-after a restart. It's also paused while your Mac sleeps, while the screen is locked, so Caps Lock
+after a restart. If Tinycast is force quit or crashes, it stays until Tinycast opens again, which
+removes it. It's also paused while your Mac sleeps, while the screen is locked, so Caps Lock
 works in the login password field, and while another user account is active.
 
-In the brief moment before the remapping takes effect, the Caps Lock light can still turn on. That's
-the hardware, and Tinycast can't prevent it.
+If a keyboard ever loses the remapping, one press there acts as plain Caps Lock. Tinycast then remaps
+that keyboard again and turns Caps Lock back off.
 
 The Hyper key needs Accessibility. Tinycast asks for it when you choose a key, keeps checking, and
 starts working as soon as access is granted.
@@ -129,8 +130,9 @@ shows a message saying why. Diagnostics names the app most likely holding Secure
 
 With Caps Lock as your Hyper key, turn on **Secure Input Compatibility** to keep **Tinycast's own**
 Hyper shortcuts working there. Caps Lock then acts as **Right Control**, so while it's on, the Right
-Control key also works as Hyper and its own shortcuts are reserved. Other apps' Hyper shortcuts still
-don't work inside Secure Input.
+Control key also works as Hyper and its own shortcuts are reserved. Inside Secure Input, Control plus
+a shortcut's key runs that Hyper shortcut, so those Control combos are taken while it lasts. Other
+apps' Hyper shortcuts still don't work inside Secure Input.
 
 ## Hiding versus turning off
 

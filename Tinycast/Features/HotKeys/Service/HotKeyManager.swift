@@ -65,6 +65,7 @@ final class HotKeyManager {
     /// Include Shift for the chord whose combos also answer to ⌃+key; nil when none should.
     private var secureInputEquivalentsIncludeShift: Bool?
     private var secureInputEquivalentIDs: [String] = []
+    private var secureInputHint: KeyShortcut?
     private static let secureInputHintID = "secureInputHint"
     /// Every binding, loaded once in `start()` and written through on change.
     private var bindings: [HotKeyAction: HotKeyBinding] = [:]
@@ -246,6 +247,8 @@ final class HotKeyManager {
     }
 
     func setSecureInputHint(_ shortcut: KeyShortcut?, onPress: @escaping () -> Void) {
+        guard shortcut != secureInputHint else { return }
+        secureInputHint = shortcut
         center.unregister(id: Self.secureInputHintID)
         guard let shortcut else { return }
         center.register(id: Self.secureInputHintID, shortcut: shortcut, onKeyDown: onPress)
@@ -259,9 +262,7 @@ final class HotKeyManager {
         let chord = KeyShortcut.hyperChord(includesShift: includesShift)
         for action in candidateActions {
             guard let equivalent = binding(for: action)?.shortcut?.secureInputEquivalent(of: chord)
-            else {
-                continue
-            }
+            else { continue }
             let id = "secureInputEquivalent." + action.defaultsKey
             center.register(
                 id: id, shortcut: equivalent, onKeyDown: { [weak self] in self?.perform(action) })

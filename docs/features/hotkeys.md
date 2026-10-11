@@ -45,8 +45,10 @@ return `OSStatus` synchronously, preserving event order and hold-to-talk release
   left-side device bits, which no display path wants.
 - **The private HID SPI lives in `Platform/HIDEventSystem.swift` alone**, resolved at runtime, so a
   macOS without it degrades the Hyper Key to `.remapUnavailable` instead of crashing.
-- **`KeyboardRemapper` only ever removes its own exact entry**, so another tool's key mapping always
-  survives Tinycast turning the Hyper Key off.
+- **`KeyboardRemapper` only ever removes the Hyper Key's own entries** (`HIDKeyMapping.hyperKeyMappings`),
+  so another tool's mapping for another key always survives Tinycast turning the Hyper Key off.
+- **A raw Caps Lock is never read as Hyper.** Its latch carries no release, so treating one as a press
+  leaves the chord on every keystroke until the next press.
 
 ## Persistence
 
@@ -202,9 +204,10 @@ suppress it. The key must therefore stop being Caps Lock **at the source**: whil
 Hyper, `KeyboardRemapper` puts a `UserKeyMapping` entry remapping it to **F18** on every keyboard
 (see below). The tap then intercepts F18 in its place. The remap never survives a reboot.
 
-Because the remap lands a moment after it is written, there is a fallback for the window before it
-takes hold: the key still arrives as Caps Lock, so the tap rides the modifier path instead. The LED
-toggles during that window — that is un-remapped HID behaviour, not something Tinycast can stop.
+A Caps Lock that still arrives raw means some keyboard has lost the remap. The tap passes it through
+as Caps Lock and `HyperKeyManager` re-merges every keyboard; when one needed it, the latch that press
+set is undone. Nothing else changes the latch while the key is remapped, so a raw press with every
+keyboard already mapped leaves it alone.
 
 Once remapped, Caps Lock arrives as **keyDown/keyUp** rather than `flagsChanged`. Both ends are
 converted into Left Control `flagsChanged` transitions, so everything downstream sees the Hyper chord
@@ -213,17 +216,24 @@ from both ends**: every function key reports `NX_SECONDARYFNMASK`, harmless on a
 real fn press once the event is a `flagsChanged`, which fired anything bound to fn on every Hyper
 press. Only the Hyper key's own two events are scrubbed, so Hyper+F-key and Hyper+arrow keep the fn
 bit they are entitled to. A classic `IOHIDSystem` connection reads and drives the Caps Lock LED and
-lock state; it is used only by the explicit Quick Press toggle and the one-time unlatch when the remap
-is installed.
+lock state; it is used only by the explicit Quick Press toggle and the unlatch when the remap is
+installed or repaired.
 
 ### Per-keyboard remapping
 
 `KeyboardRemapper` writes through `HIDEventSystem`, the private IOKit SPI `hidutil` itself drives. It is
 bound with `dlsym` in `Platform/HIDEventSystem.swift`, the only file that touches it, so a macOS that
 drops a symbol reports `.remapUnavailable` instead of crashing. Remapping each keyboard rather than the
-whole system is what lets it **merge**: another tool's entry for another key survives, ours replaces only
-an entry for the same source key, a keyboard that already matches is not rewritten, and teardown removes
-only our exact entry. A keyboard plugged in later gets the mapping from the device-matching callback.
+whole system is what lets it **merge** (`HIDKeyMapping.reconciled`): another tool's entry for another key
+survives, ours replaces any entry for the same source key, a keyboard that already matches is not
+rewritten, and teardown removes both Hyper Key entries, so one an earlier route left goes too. The
+client is created on first use and kept, because its device-matching callback is what remaps a
+keyboard plugged in or reconnected later.
+
+A crash or force quit skips teardown, and the remap outlives the process. A UserDefaults marker is set
+before the first write and cleared once the mapping is off, so the next launch takes a leftover off
+even when the Hyper Key is now None. Without the marker nothing is swept, so a Caps Lock → F18 mapping
+another tool placed is never touched.
 
 The mapping comes off on unbind, on quit, while the Mac sleeps, while the screen is locked — a password
 typed at the lock screen needs a real Caps Lock — and while another user's session is active, and goes
@@ -236,9 +246,9 @@ so `ModifierKey.held(in:)` reads each press and release of a modifier Hyper key 
 A hold dropped mid-press — by a Secure Input transition, a tap timeout or a pause — costs at most the
 rest of that press and can never invert the key. Toggling instead would let one dropped hold read
 every later release as a press, leaving the chord on every keystroke; querying `CGEventSource` key
-state **races the release**. The one toggle left is the window before the Caps Lock remap lands,
-because alpha-shift is a latch, not a press. Work that posts events or touches IOKit is deferred to
-the next runloop turn rather than run inside the tap callback, where it would risk re-entrancy.
+state **races the release**. Nothing toggles: Caps Lock is a press only once remapped, never as its
+raw latch. Work that posts events or touches IOKit is deferred to the next runloop turn rather than
+run inside the tap callback, where it would risk re-entrancy.
 
 The flags OR'd into every rewritten event are the generic ⌃⌥(⇧)⌘ masks **plus the left-side device
 bits** (`NX_DEVICE…KEYMASK`, from `IOLLEvent.h`). Some consumers distinguish sides, and generic-only
@@ -259,8 +269,9 @@ swallowed it, which is why Quick Press worked in Ghostty but never in Zed or the
 machine for it.
 
 - **Known apps.** Hyperkey and Superkey bring a Hyper Key of their own and are **blocking**: while one
-  runs ours stays `.blocked`, says so once in a HUD, and comes back by itself when it quits — launch and
-  terminate notifications re-run `apply()`, but only for those bundle IDs. BetterTouchTool is a
+  runs ours stays `.blocked`, says so once in a HUD, and comes back by itself when it quits — KVO on
+  `NSWorkspace.runningApplications` re-runs `apply()`, but only for those bundle IDs. Launch and
+  terminate notifications cannot do it: macOS skips them for menu-bar apps, and both blockers are ones. BetterTouchTool is a
   **warning**, listed and never acted on. Other running event taps are not conflicts: most are benign.
 - **Karabiner.** It seizes the real keyboards and types through its virtual keyboard, so that one gets
   the remap too. A conflict is that keyboard already sending our key elsewhere, or the selected profile
