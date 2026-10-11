@@ -235,9 +235,12 @@ final class TextInjector {
     func copySelection(
         from targetApp: NSRunningApplication?, pasteboard: any PasteboardAccess
     ) async -> String? {
-        clipboardManager.prepareForTinycastPasteboardMutation()
         guard let original = PasteboardSnapshot(pasteboard: pasteboard) else { return nil }
-        defer { restore(original, to: pasteboard) }
+        clipboardManager.pauseCapture()
+        defer {
+            restore(original, to: pasteboard)
+            clipboardManager.resumeCapture()
+        }
 
         Paster.postCommandC(toPid: targetApp?.processIdentifier)
         for _ in 0..<Self.copyPollAttempts {

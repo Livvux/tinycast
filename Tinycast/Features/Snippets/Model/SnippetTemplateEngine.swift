@@ -4,7 +4,7 @@ enum SnippetTemplateEngine {
     struct ExpansionContext: Sendable {
         /// Clipboard history, most recent first: `{clipboard}` is offset 0.
         let clipboardHistory: [String]
-        let selection: String
+        var selection: String
         let now: Date
         let calendar: Calendar
         let locale: Locale
@@ -70,6 +70,8 @@ enum SnippetTemplateEngine {
         let text: String
         let cursorOffsetFromEnd: Int?
         let missingArguments: [MissingArgument]
+        /// Counts nested `{snippet:…}` too, which a parse of the top-level text alone would miss.
+        let readsSelection: Bool
     }
 
     /// Formatting the result asks for: none for a snippet, percent-encoding for a quicklink URL.
@@ -132,19 +134,12 @@ enum SnippetTemplateEngine {
         }
     }
 
-    /// Whether the template reads the selection. Parsed, so a literal brace run doesn't count.
-    static func usesSelection(_ text: String) -> Bool {
-        parseSegments(text).contains { segment in
-            if case .selection = segment { return true }
-            return false
-        }
-    }
-
     private static func result(of expansion: Expansion) -> ExpansionResult {
         ExpansionResult(
             text: expansion.text,
             cursorOffsetFromEnd: expansion.cursorCharacterOffset.map { expansion.text.count - $0 },
-            missingArguments: expansion.missingArguments
+            missingArguments: expansion.missingArguments,
+            readsSelection: expansion.readsSelection
         )
     }
 
@@ -153,6 +148,7 @@ enum SnippetTemplateEngine {
         var cursorCharacterOffset: Int?
         var missingArguments: [MissingArgument] = []
         var missingArgumentNames = Set<String>()
+        var readsSelection = false
 
         mutating func append(_ value: String) {
             text += value
@@ -164,6 +160,7 @@ enum SnippetTemplateEngine {
                 cursorCharacterOffset = insertionOffset + nestedCursor
             }
             text += nested.text
+            readsSelection = readsSelection || nested.readsSelection
             for argument in nested.missingArguments {
                 addMissingArgument(argument)
             }
@@ -254,6 +251,7 @@ enum SnippetTemplateEngine {
                     ? context.clipboardHistory[offset] : ""
                 result.append(apply(modifiers, to: value, encoding: encoding))
             case .selection(let modifiers):
+                result.readsSelection = true
                 result.append(apply(modifiers, to: context.selection, encoding: encoding))
             case .dateTime(let token, let modifiers):
                 result.append(

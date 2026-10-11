@@ -77,19 +77,21 @@ final class QuicklinkCoordinator {
         id: UUID, forcingDefaultApp: Bool = false, values: [String: String] = [:]
     ) {
         guard let quicklink = openableQuicklink(id: id) else { return }
-        open(
-            quicklink, context: captureContext(), values: values,
-            forcingDefaultApp: forcingDefaultApp)
+        open(makeAttempt(quicklink, values: values, forcingDefaultApp: forcingDefaultApp))
     }
 
     /// The only entry that seeds an argument from the selection.
     func openQuicklinkFromHotKey(id: UUID) {
         guard let quicklink = openableQuicklink(id: id) else { return }
-        let context = captureContext()
-        open(
-            quicklink, context: context,
-            values: selectedTextArgument(for: quicklink, selection: context.selection),
-            forcingDefaultApp: false)
+        let attempt = makeAttempt(quicklink, values: [:], forcingDefaultApp: false)
+        guard let argument = selectedTextArgument(for: quicklink) else { return open(attempt) }
+        guard attempt.context.selection.isEmpty, let app = attempt.copySource else {
+            return open(attempt.filling(argument))
+        }
+        Task {
+            guard let copied = await copyingSelection(into: attempt, from: app) else { return }
+            open(copied.filling(argument))
+        }
     }
 
     /// The fallback row's query, which fills the first `{argument}` the link still owes.
@@ -109,49 +111,87 @@ final class QuicklinkCoordinator {
         return quicklink
     }
 
-    private func captureContext() -> SnippetTemplateEngine.ExpansionContext {
+    private struct OpenAttempt {
+        var quicklink: Quicklink
+        var context: SnippetTemplateEngine.ExpansionContext
+        /// Where a ⌘C may still read the selection from; nil once one has been tried.
+        var copySource: NSRunningApplication?
+        var values: [String: String]
+        var forcingDefaultApp: Bool
+
+        func filling(_ argument: String) -> OpenAttempt {
+            let text = context.selection.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return self }
+            var attempt = self
+            attempt.values[argument] = text
+            return attempt
+        }
+    }
+
+    private func makeAttempt(
+        _ quicklink: Quicklink, values: [String: String], forcingDefaultApp: Bool
+    ) -> OpenAttempt {
         // With the palette closed a shortcut still reads the selection from wherever the caret is.
         let target =
             windowController.isVisible
             ? windowController.previousTarget : InjectionTarget.current()
-        return injector.captureExpansionContext(
-            target: target, clipboardHistory: clipboardHistory())
+        return OpenAttempt(
+            quicklink: quicklink,
+            context: injector.captureExpansionContext(
+                target: target, clipboardHistory: clipboardHistory()),
+            copySource: target?.externalApp, values: values, forcingDefaultApp: forcingDefaultApp)
     }
 
-    private func selectedTextArgument(
-        for quicklink: Quicklink, selection: String
-    ) -> [String: String] {
+    private func selectedTextArgument(for quicklink: Quicklink) -> String? {
         guard settings.quicklinkPassesSelectedText,
             let first = SnippetTemplateEngine.declaredArguments(in: quicklink.link).first,
             first.options.isEmpty
-        else { return [:] }
-        let text = selection.trimmingCharacters(in: .whitespacesAndNewlines)
-        return text.isEmpty ? [:] : [first.name: text]
+        else { return nil }
+        return first.name
     }
 
     /// Every open ends here, so neither missing values nor an empty selection can be bypassed.
-    private func open(
-        _ quicklink: Quicklink, context: SnippetTemplateEngine.ExpansionContext,
-        values: [String: String], forcingDefaultApp: Bool
-    ) {
+    private func open(_ attempt: OpenAttempt) {
+        var attempt = attempt
+        let quicklink = attempt.quicklink
         let encoding: SnippetTemplateEngine.ValueEncoding =
             QuicklinkDestination.usesURLEncoding(quicklink.link) ? .percentEncoding : .none
         // The override outlives the trip through the fields, so it is honoured on the way back.
-        let forcesDefault = forcingDefaultApp || pendingDefaultAppOverride == quicklink.id
+        attempt.forcingDefaultApp =
+            attempt.forcingDefaultApp || pendingDefaultAppOverride == quicklink.id
         let expansion = SnippetTemplateEngine.expand(
-            text: quicklink.link, context: context, userArguments: values, encoding: encoding)
+            text: quicklink.link, context: attempt.context, userArguments: attempt.values,
+            encoding: encoding)
         guard expansion.missingArguments.isEmpty else {
-            pendingDefaultAppOverride = forcesDefault ? quicklink.id : nil
-            promptForArguments(quicklink, values: values)
+            pendingDefaultAppOverride = attempt.forcingDefaultApp ? quicklink.id : nil
+            promptForArguments(quicklink, values: attempt.values)
             return
         }
         pendingDefaultAppOverride = nil
-        // An empty `{selection}` fails rather than opening a search for nothing.
-        if context.selection.isEmpty, SnippetTemplateEngine.usesSelection(quicklink.link) {
-            reportMissingSelection()
+        guard expansion.readsSelection, attempt.context.selection.isEmpty else {
+            performQuicklinkOpen(
+                quicklink, link: expansion.text, forcingDefaultApp: attempt.forcingDefaultApp)
             return
         }
-        performQuicklinkOpen(quicklink, link: expansion.text, forcingDefaultApp: forcesDefault)
+        // An empty `{selection}` fails rather than opening a search for nothing.
+        guard let app = attempt.copySource else { return reportMissingSelection() }
+        Task {
+            guard let copied = await copyingSelection(into: attempt, from: app) else { return }
+            open(copied)
+        }
+    }
+
+    private func copyingSelection(
+        into attempt: OpenAttempt, from app: NSRunningApplication
+    ) async -> OpenAttempt? {
+        // The palette holds key, so the ⌘C would land in its own search field.
+        if windowController.isVisible { paletteCoordinator.hidePalette(restoreFocus: false) }
+        var attempt = attempt
+        attempt.context.selection = await injector.copySelection(from: app) ?? ""
+        attempt.copySource = nil
+        guard let quicklink = openableQuicklink(id: attempt.quicklink.id) else { return nil }
+        attempt.quicklink = quicklink
+        return attempt
     }
 
     private func reportMissingSelection() {

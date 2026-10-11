@@ -495,8 +495,11 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 ### Quicklinks
 
 - A quicklink opens its destination; `{argument}` prompts in order and Backspace steps back
-- `{selection}` with nothing selected opens nothing and shows "Couldn’t get the selected text"; the
-  palette stays put. With a required `{argument}` too, the argument is asked for first
+- `{selection}` with nothing selected opens nothing and shows "Couldn’t get the selected text". With
+  a required `{argument}` too, the argument is asked for first
+- In an app Accessibility can't read (a terminal, an Electron app), a `{selection}` quicklink still
+  opens with the selected text, the clipboard holds what it held before, and Clipboard History gains
+  no entry for the selection. Repeat it ten times to be sure
 - With **Pass selected text as argument** on, select text and press a quicklink's shortcut: its first
   free-text argument is filled and the link opens. Blank selection or an `options=` first argument still
   prompts; Return on the row in the launcher never fills from the selection
@@ -655,6 +658,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Enabling shows the consent dialog **before** the Accessibility prompt
 - Declining leaves the feature off and prompts for nothing
 - After enabling, a keyword expands in a text field; an argument-bearing snippet prompts then delivers
+- A `{selection}` snippet inserted from Search Snippets or its shortcut wraps text selected in an app
+  Accessibility can't read, and the clipboard is restored afterwards
 - Editing a snippet file externally reloads it
 
 ### Calculator and currency

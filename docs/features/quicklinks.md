@@ -114,9 +114,11 @@ glyph, then the chips, right after the typed text — and `.besideSearchField` o
 where the field stays a filter with its prompt intact and the row below already carries the glyph.
 
 **`{selection}` is never a field, and an empty one fails.** It is read when the link opens, after
-every owed argument is in. When the app in front gives no selected text, nothing opens: the HUD says
-"Couldn’t get the selected text", or names the Accessibility permission when Tinycast lacks it, and
-the palette stays where it was.
+every owed argument is in, through the two tiers in
+[quick-actions.md](quick-actions.md#reading-the-selection): Accessibility, then a ⌘C. The ⌘C is sent
+at most once per open, only when the expansion reads `{selection}`, and with the palette hidden
+first, since it holds key. When neither tier yields text, nothing opens: the HUD says "Couldn’t get
+the selected text", or names the Accessibility permission when Tinycast lacks it.
 
 `openQuicklink(id:forcingDefaultApp:values:)` and `openQuicklinkFromHotKey(id:)` share one private
 funnel, which captures the expansion context on **every** call rather than holding one across a
@@ -140,9 +142,11 @@ quicklink in the `Use “…” with…` section (see [launcher.md](launcher.md#
 one when every argument has a default — and opens at once when that was the only one owed.
 
 **Pass selected text as argument** (off by default) lets a quicklink's **own shortcut** fill its
-**first** argument with the trimmed selection. It applies only when that argument is typed rather
-than chosen from `options=`, and a blank selection fills nothing, so the usual prompt appears. Any other argument still owed is asked for beside it. Palette activation and fallback rows
-never read the selection into an argument; only `openQuicklinkFromHotKey(id:)` does.
+**first** argument with the trimmed selection, read through the same two tiers. It applies only when
+that argument is typed rather than chosen from `options=`, and a blank selection fills nothing, so
+the usual prompt appears. Any other argument still owed is asked for beside it. Palette activation
+and fallback rows never read the selection into an argument; only `openQuicklinkFromHotKey(id:)`
+does. A ⌘C tried there is not tried again for `{selection}` in the same open.
 
 ## Opening
 

@@ -1579,17 +1579,21 @@ struct SnippetsTests {
             SnippetTemplateEngine.expand(aliasSnippet, snippets: [], context: context).text
                 == "[a b&c]")
 
-        // usesSelection drives the selection-fallback setting.
         check(
-            "usesSelection sees both spellings",
-            SnippetTemplateEngine.usesSelection("a {selection} b")
-                && SnippetTemplateEngine.usesSelection("a {selectedText} b"))
+            "readsSelection sees both spellings",
+            expand("a {selection} b").readsSelection && expand("a {selectedText} b").readsSelection)
         check(
-            "usesSelection is false for a template that reads no selection",
-            !SnippetTemplateEngine.usesSelection("{clipboard} {date}"))
+            "readsSelection is false for a template that reads no selection",
+            !expand("{clipboard} {date}").readsSelection)
         check(
-            "usesSelection parses rather than searches, so a malformed token does not count",
-            !SnippetTemplateEngine.usesSelection("{selection offset=1}"))
+            "readsSelection parses rather than searches, so a malformed token does not count",
+            !expand("{selection offset=1}").readsSelection)
+        let quoting = record("/tmp/quoting.md", Snippet(name: "Quoting", text: "> {selection}"))
+        let quoted = record("/tmp/quoted.md", Snippet(name: "Quoted", text: "{snippet:Quoting}"))
+        check(
+            "readsSelection reaches into a nested snippet",
+            SnippetTemplateEngine.expand(quoted, snippets: [quoting, quoted], context: context)
+                .readsSelection)
 
         // {query} is Raycast's spelling of {argument}.
         check(
@@ -2034,6 +2038,8 @@ final class ClipboardManager {
     static let internalType = NSPasteboard.PasteboardType("com.tinycast.internal")
     func prepareForTinycastPasteboardMutation() {}
     func synchronizeAfterTinycastPasteboardMutation(changeCount: Int) {}
+    func pauseCapture() {}
+    func resumeCapture() {}
 }
 
 @MainActor
