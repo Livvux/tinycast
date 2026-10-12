@@ -20,10 +20,13 @@ final class FileSearchSession {
     private var revision = 0
     @ObservationIgnored private var pendingSearch: PendingSearch?
     @ObservationIgnored private var workerTask: Task<Void, Never>?
+    @ObservationIgnored private var contentTask: Task<Void, Never>?
     @ObservationIgnored private let homeDirectory: URL
     @ObservationIgnored private var policy: FileSearchPolicy
     @ObservationIgnored private let debounce: Duration
     @ObservationIgnored private let searchOperation: SearchOperation
+    /// Slower than Spotlight, so it runs after the filename rows publish and appends beneath them.
+    @ObservationIgnored private let contentOperation: SearchOperation?
 
     private struct Request: Equatable {
         let query: String
@@ -48,15 +51,18 @@ final class FileSearchSession {
                 try FileSearchService.search(query: query, policy: policy, filter: filter)
             }.value
         }
+        contentOperation = FileSearchContentService.search
     }
 
     init(
         policy: FileSearchPolicy, debounce: Duration,
+        contentOperation: SearchOperation? = nil,
         searchOperation: @escaping SearchOperation
     ) {
         homeDirectory = policy.homeDirectory
         self.policy = policy
         self.debounce = debounce
+        self.contentOperation = contentOperation
         self.searchOperation = searchOperation
     }
 
@@ -76,6 +82,7 @@ final class FileSearchSession {
         let request = Request(query: query, filter: filter)
         guard request != self.request || state == .failed else { return }
         revision &+= 1
+        contentTask?.cancel()
         self.request = request
         state = .searching
         // No debounce on the blank screen: there is no next keystroke for it to coalesce with.
@@ -91,6 +98,7 @@ final class FileSearchSession {
 
     func cancel() {
         revision &+= 1
+        contentTask?.cancel()
         pendingSearch = nil
         request = nil
         results = []
@@ -114,6 +122,7 @@ final class FileSearchSession {
                 guard revision == pending.revision, self.request == request else { continue }
                 results = candidates
                 state = .ready
+                appendContentMatches(for: request, revision: pending.revision)
             } catch {
                 guard revision == pending.revision, self.request == request else { continue }
                 results = []
@@ -121,5 +130,18 @@ final class FileSearchSession {
             }
         }
         workerTask = nil
+    }
+
+    private func appendContentMatches(for request: Request, revision: Int) {
+        guard let contentOperation, !request.query.isEmpty else { return }
+        let policy = policy
+        contentTask = Task { [weak self] in
+            guard
+                let matches = try? await contentOperation(request.query, request.filter, policy),
+                let self, self.revision == revision, self.request == request
+            else { return }
+            let shown = Set(results.map(\.id))
+            results += matches.filter { !shown.contains($0.id) }
+        }
     }
 }

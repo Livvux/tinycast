@@ -1,8 +1,9 @@
 # Search Files
 
 Search Files is an on-demand palette screen for opening files and folders from the folders the user
-configures. It searches filenames through Spotlight, adds no private index or launch work, and is
-reached from the built-in Search Files launcher command — or its own global shortcut — after the
+configures. It searches filenames through Spotlight — and file contents through
+[DigUp](https://github.com/ARahim3/DigUp) when that app is installed — adds no private index or launch
+work, and is reached from the built-in Search Files launcher command — or its own global shortcut — after the
 feature is enabled in Settings.
 
 ## Invariants
@@ -15,7 +16,7 @@ feature is enabled in Settings.
   and the `UniformTypeIdentifiers` of `FileSearchFilter` and `FileSearchPreviewKind` included — value
   types with no environment of their own. `file-search-test` compiles the shipped files together with
   the existing pure fuzzy scorer.
-- **Search is filename-only, and every list comes from Spotlight.** Tinycast creates no content index,
+- **Filenames come from Spotlight, contents only from DigUp's own index.** Tinycast creates no content index,
   history, query cache, watcher or search data — the blank screen's Recently Used rows are one more
   Spotlight query over the configured scopes, read from the system's own `kMDItemLastUsedDate` and
   `kMDItemFSContentChangeDate`, never from anything Tinycast recorded. The type filter narrows *which*
@@ -77,6 +78,20 @@ the developer home: 200 URLs stat in 13 ms, where 200 metadata fetches cost 200 
 
 Visible files and document packages directly under home are matched locally with the same case- and
 diacritic-insensitive all-terms rule, since scoping Spotlight to home itself would pull in `~/Library`.
+
+## Content matches
+
+When DigUp is installed, a typed query also runs its `digup search --json` helper, found through
+Launch Services by DigUp's bundle identifier. Spotlight's rows publish first; the helper's answer —
+about a second, mostly its model start-up — is appended beneath them without repeating a filename row.
+`FileSearchContentQuery` owns the arguments and the JSON, `FileSearchContentService` the process.
+
+- **DigUp's index is DigUp's.** Its folders, model and exclusions are chosen in DigUp; Tinycast only
+  drops what its own ignore list, hidden paths and app bundles already drop, plus folders.
+- **The filter maps onto DigUp's kinds**, and Folders and Archives start no helper at all.
+- **A newer query terminates the helper.** `FileSearchSession` cancels the content task on every
+  `search` and `cancel`, and a result still checks the revision before it appends.
+- **Absence is silent.** No DigUp, no model or a failed run is no content rows, never an error.
 
 ## Recently used
 

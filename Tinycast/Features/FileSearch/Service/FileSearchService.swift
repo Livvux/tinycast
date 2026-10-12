@@ -132,7 +132,7 @@ enum FileSearchService {
     }
 
     /// One stat answers what three metadata fetches used to, at a thousandth of the cost.
-    private nonisolated static func resolve(
+    nonisolated static func resolve(
         _ path: String, homeDirectory: URL
     ) -> FileSearchResult? {
         let url = URL(fileURLWithPath: path)

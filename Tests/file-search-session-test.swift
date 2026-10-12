@@ -78,6 +78,8 @@ struct FileSearchSessionTests {
         await unchangedPolicyKeepsResults()
         await blankQueryLoadsRecents()
         await filterChangeRerunsTheQuery()
+        await contentMatchesAppendBeneathFilenames()
+        await supersededContentMatchesNeverPublish()
 
         print(failures == 0 ? "File search session tests passed" : "\(failures) tests failed")
         exit(failures == 0 ? 0 : 1)
@@ -184,10 +186,57 @@ struct FileSearchSessionTests {
             "narrowing the filter re-runs the same words, and re-stating it runs nothing")
     }
 
-    static func makeSession(probe: FileSearchProbe, debounce: Duration) -> FileSearchSession {
+    static func contentMatchesAppendBeneathFilenames() async {
+        let session = makeSession(
+            probe: FileSearchProbe(), debounce: .milliseconds(10),
+            content: { query, _, policy in
+                ["\(query)", "lease.pdf"].map {
+                    FileSearchResult(
+                        url: policy.homeDirectory.appending(path: $0), isDirectory: false,
+                        homeDirectory: policy.homeDirectory)
+                }
+            })
+        session.search("")
+        await waitUntil { session.state == .ready }
+        try? await Task.sleep(for: .milliseconds(20))
+        expect(session.results.count == 1, "the blank screen never asks for content")
+        session.search("pets")
+        await waitUntil { session.results.map(\.name) == ["pets", "lease.pdf"] }
+        expect(
+            session.results.map(\.name) == ["pets", "lease.pdf"],
+            "content matches follow the filename rows, without repeating one")
+    }
+
+    static func supersededContentMatchesNeverPublish() async {
+        let session = makeSession(
+            probe: FileSearchProbe(), debounce: .milliseconds(10),
+            content: { query, _, policy in
+                try await Task.sleep(for: .milliseconds(query == "slow" ? 150 : 0))
+                return [
+                    FileSearchResult(
+                        url: policy.homeDirectory.appending(path: "\(query).pdf"),
+                        isDirectory: false, homeDirectory: policy.homeDirectory)
+                ]
+            })
+        session.search("slow")
+        await waitUntil { session.state == .ready && session.results.first?.name == "slow" }
+        session.search("fast")
+        await waitUntil { session.results.map(\.name) == ["fast", "fast.pdf"] }
+        try? await Task.sleep(for: .milliseconds(200))
+        expect(
+            session.results.map(\.name) == ["fast", "fast.pdf"],
+            "a superseded content search never lands under the newer query")
+    }
+
+    static func makeSession(
+        probe: FileSearchProbe, debounce: Duration,
+        content: FileSearchSession.SearchOperation? = nil
+    ) -> FileSearchSession {
         let policy = FileSearchPolicy(
             scopes: FileSearchScope.defaultScopes, ignorePatterns: [], homeDirectory: home)
-        return FileSearchSession(policy: policy, debounce: debounce) { query, filter, policy in
+        return FileSearchSession(
+            policy: policy, debounce: debounce, contentOperation: content
+        ) { query, filter, policy in
             await probe.search(query: query, filter: filter, policy: policy)
         }
     }

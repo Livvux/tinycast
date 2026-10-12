@@ -28,6 +28,7 @@ struct FileSearchTests {
         resultModel()
         ranking()
         previewKind()
+        contentQuery()
 
         print(failures == 0 ? "File search tests passed" : "\(failures) file search tests failed")
         exit(failures == 0 ? 0 : 1)
@@ -330,5 +331,31 @@ struct FileSearchTests {
         expect(
             !FileSearchPreviewKind.isText(Data("abc".utf8) + [0xFF], isWholeFile: false),
             "a read forgives a cut character, not a malformed byte")
+    }
+
+    static func contentQuery() {
+        expect(
+            FileSearchContentQuery.arguments(for: "a dog", filter: .all)
+                == ["search", "-n", "40", "--json", "a dog"],
+            "an unfiltered content search names no kind")
+        expect(
+            FileSearchContentQuery.arguments(for: "lease", filter: .documents)?.suffix(3)
+                == ["--kind", "pdf,doc", "lease"],
+            "the type filter narrows DigUp's kinds")
+        expect(
+            FileSearchContentQuery.arguments(for: "-n", filter: .all)?.last == " -n",
+            "a query that looks like an option stays the query")
+        expect(
+            FileSearchContentQuery.arguments(for: "src", filter: .folders) == nil
+                && FileSearchContentQuery.arguments(for: "", filter: .all) == nil,
+            "folders, archives and the blank screen start no helper")
+        let json = Data(
+            #"[{"path":"/a.pdf","loc":1},{"path":"/b.mp4"},{"path":"/a.pdf","loc":4}]"#.utf8)
+        expect(
+            FileSearchContentQuery.paths(fromJSON: json) == ["/a.pdf", "/b.mp4"],
+            "a file's pages collapse to its best-ranked hit")
+        expect(
+            FileSearchContentQuery.paths(fromJSON: Data("no good matches".utf8)).isEmpty,
+            "unreadable output is no hits")
     }
 }
